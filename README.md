@@ -1,8 +1,8 @@
 # rbtree
 
 This package provides an implementation of a balanced tree, with search and
-deletion operations guaranteed to run in \( O(\log_2(N)) \) time for a tree
-containing \( N \) elements. It uses a standard red-black tree structure.
+deletion operations guaranteed to run in $O(\log_2(N))$ time for a tree
+containing $N$ elements. It uses a standard red-black tree structure.
 
 ## Data Structure
 
@@ -30,14 +30,14 @@ Nodes can be inserted into the tree with `rb_insert()` and removed with
 comparison function, can be accessed using `rb_get_min()` and `rb_get_max()`,
 respectively. Additionally, the `rb_contains()` function checks if a specific
 node pointer exists within the tree. All of these operations have a maximum time
-complexity of \( O(\log(N)) \) based on the size of the tree.
+complexity of $O(\log(N))$ based on the size of the tree.
 
 ### Operations
 
 One method is provided for iterating through all elements of an `rbtree` using
 the `RB_FOREACH` iterator. This iterator allows for a more natural iteration
 over the tree with a nested code block instead of a callback function. It is
-non-recursive but requires \( O(\log(N)) \) stack space by default. This
+non-recursive but requires $O(\log(N))$ stack space by default. This
 behavior can be configured to use a fixed, maximally sized buffer to avoid
 dynamic allocation. Additionally, there is an `RB_FOREACH_CONTAINER` variant
 that iterates using a pointer to the container field rather than the raw node
@@ -78,29 +78,29 @@ runtime storage overhead beyond that of a doubly-linked list.
 ```
 +-------------+     node 2 (black)
 | rbtree      |    +------------------+
-| * root ----------| rbnode           |
+| * root ----------|     rbnode       |
 | * max_depth |    | * left | * right |
 +-------------+    +----/---------\---+
                        /           \
        node 1 (black) /             \ node 4 (red)
-      +------------------+           +------------------+
-      | rbnode           |           | rbnode           |
-      | * left | * right |           | * left | * right |
-      +----/---------\---+           +----/---------\---+
-          /           \                  /           \
-       NULL           NULL              /             \
-                            node 3 (black)        node 5 (black)
-                           +------------------+  +------------------+
-                           | rbnode           |  | rbnode           |
-                           | * left | * right |  | * left | * right |
-                           +----/---------\---+  +----/---------\---+
-                               /           \         /           \
-                            NULL           NULL    NULL           \
-                                                         node 6 (red)
-                                                        +------------------+
-                                                        | rbnode           |
-                                                        | * left | * right |
-                                                        +----/---------\---+
-                                                            /           \
-                                                         NULL           NULL
+      +------------------+       +------------------+
+      |     rbnode       |       |     rbnode       |
+      | * left | * right |       | * left | * right |
+      +----/---------\---+       +----/---------\---+
+          /           \              /           \
+       NULL           NULL          /             \
+                        node 3 (black)        node 5 (black)
+                       +------------------+  +------------------+
+                       |     rbnode       |  |     rbnode       |
+                       | * left | * right |  | * left | * right |
+                       +----/---------\---+  +----/---------\---+
+                           /           \         /           \
+                        NULL           NULL    NULL           \
+                                                     node 6 (red)
+                                                   +------------------+
+                                                   |     rbnode       |
+                                                   | * left | * right |
+                                                   +----/---------\---+
+                                                       /           \
+                                                    NULL           NULL
 ```
