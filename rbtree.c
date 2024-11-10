@@ -2,7 +2,7 @@
 
 #include "rbtree.h"
 
-typedef enum { RED = 0, BLACK = 1 } rb_color_t;
+typedef enum { RB_RED = 0, RB_BLACK = 1 } rb_color_t;
 
 /* Retrieve the left or right child of a given node.
  * @n:    Pointer to the current node.
@@ -51,18 +51,28 @@ static inline rb_color_t get_color(rb_node_t *n)
 
 static inline bool is_black(rb_node_t *n)
 {
-    return get_color(n) == BLACK;
+    return get_color(n) == RB_BLACK;
 }
 
 static inline bool is_red(rb_node_t *n)
 {
-    return get_color(n) == RED;
+    return get_color(n) == RB_RED;
 }
 
 static inline void set_color(rb_node_t *n, rb_color_t color)
 {
     uintptr_t *p = (void *) &n->children[0];
     *p = (*p & ~1UL) | (uint8_t) color;
+}
+
+static inline void set_black(rb_node_t *n)
+{
+    set_color(n, RB_BLACK);
+}
+
+static inline void set_red(rb_node_t *n)
+{
+    set_color(n, RB_RED);
 }
 
 /* Traverse the red-black tree and stack nodes along the path.
@@ -195,9 +205,9 @@ static void fix_extra_red(rb_node_t **stack, int stacksz)
 
         /* Case 1: The aunt is red. Recolor and move up the tree. */
         if (aunt && is_red(aunt)) {
-            set_color(grandparent, RED);
-            set_color(parent, BLACK);
-            set_color(aunt, BLACK);
+            set_red(grandparent);
+            set_black(parent);
+            set_black(aunt);
 
             /* The grandparent node was colored red, may having a red parent.
              * Continue iterating to fix the tree from this point.
@@ -217,13 +227,13 @@ static void fix_extra_red(rb_node_t **stack, int stacksz)
 
         /* Rotate the grandparent with the parent and swap their colors. */
         rotate(stack, stacksz - 1);
-        set_color(stack[stacksz - 3], BLACK);
-        set_color(stack[stacksz - 2], RED);
+        set_black(stack[stacksz - 3]);
+        set_red(stack[stacksz - 2]);
         return;
     }
 
     /* If the loop exits, the node has become the root, which must be black. */
-    set_color(stack[0], BLACK);
+    set_black(stack[0]);
 }
 
 void rb_insert(rb_t *tree, rb_node_t *node)
@@ -235,7 +245,7 @@ void rb_insert(rb_t *tree, rb_node_t *node)
     if (!tree->root) {
         tree->root = node;
         tree->max_depth = 1;
-        set_color(node, BLACK);
+        set_black(node);
         return;
     }
 
@@ -257,7 +267,7 @@ void rb_insert(rb_t *tree, rb_node_t *node)
 
     /* Link the new node to its parent and set its color to red. */
     set_child(parent, side, node);
-    set_color(node, RED);
+    set_red(node);
 
     /* Push the new node onto the stack and fix any red-red violations. */
     stack[stacksz++] = node;
@@ -301,8 +311,8 @@ static void fix_missing_black(rb_node_t **stack,
         if (!is_black(sib)) {
             stack[stacksz - 1] = sib;
             rotate(stack, stacksz);
-            set_color(parent, RED);
-            set_color(sib, BLACK);
+            set_red(parent);
+            set_black(sib);
             stack[stacksz++] = n;
 
             parent = stack[stacksz - 2];
@@ -318,7 +328,7 @@ static void fix_missing_black(rb_node_t **stack,
             if (n == null_node)
                 set_child(parent, n_side, NULL);
 
-            set_color(sib, RED);
+            set_red(sib);
             if (is_black(parent)) {
                 /* Rebalance the sibling's subtree by coloring it red.
                  * The parent now has a black deficit, so continue iterating
@@ -328,7 +338,7 @@ static void fix_missing_black(rb_node_t **stack,
                 continue;
             }
             /* Recoloring makes the whole tree OK */
-            set_color(parent, BLACK);
+            set_black(parent);
             return;
         }
 
@@ -343,8 +353,8 @@ static void fix_missing_black(rb_node_t **stack,
             stack[stacksz - 1] = sib;
             stack[stacksz++] = inner;
             rotate(stack, stacksz);
-            set_color(sib, RED);
-            set_color(inner, BLACK);
+            set_red(sib);
+            set_black(inner);
 
             /* Update the stack to place N at the top and set 'sib' to the
              * updated sibling.
@@ -360,8 +370,8 @@ static void fix_missing_black(rb_node_t **stack,
          * tree.
          */
         set_color(sib, get_color(parent));
-        set_color(parent, BLACK);
-        set_color(outer, BLACK);
+        set_black(parent);
+        set_black(outer);
         stack[stacksz - 1] = sib;
         rotate(stack, stacksz);
         if (n == null_node)
@@ -456,7 +466,7 @@ void rb_remove(rb_t *tree, rb_node_t *node)
     if (stacksz < 2) {
         tree->root = child;
         if (child) {
-            set_color(child, BLACK);
+            set_black(child);
         } else {
             tree->max_depth = 0;
         }
@@ -482,7 +492,7 @@ void rb_remove(rb_t *tree, rb_node_t *node)
 
         /* If either the node or child is red, recolor the child to black. */
         if (is_red(node) || is_red(child))
-            set_color(child, BLACK);
+            set_black(child);
     }
 
     /* Update the root pointer after potential rotations. */
