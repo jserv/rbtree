@@ -82,14 +82,29 @@ typedef struct {
 /* Prototype for node visitor callback */
 typedef void (*rb_visit_t)(rb_node_t *node, void *cookie);
 
+/* forward declaration for helper functions, used for inlining */
 rb_node_t *__rb_child(rb_node_t *node, uint8_t side);
 int __rb_is_black(rb_node_t *node);
 rb_node_t *__rb_get_minmax(rb_t *tree, uint8_t side);
 
-/* Insert a node into the red-black tree */
+/* Insert a new node into the red-black tree.
+ * @tree: Pointer to the red-black tree.
+ * @node: Pointer to the node to be inserted.
+ *
+ * This function initializes the new node, finds its insertion point,
+ * and adjusts the tree to maintain red-black properties. It handles
+ * the root case, allocates the traversal stack, performs the insertion,
+ * and fixes any violations caused by the insertion.
+ */
 void rb_insert(rb_t *tree, rb_node_t *node);
 
-/* Remove a node from the red-black tree */
+/* Remove a node from the red-black tree.
+ * @tree: Pointer to the red-black tree.
+ * @node: Pointer to the node to be removed.
+ *
+ * This function handles the removal of a node from the red-black tree,
+ * rebalancing the tree as necessary to maintain red-black properties.
+ */
 void rb_remove(rb_t *tree, rb_node_t *node);
 
 /* Return the lowest-sorted member of the red-black tree */
@@ -105,18 +120,30 @@ static inline rb_node_t *rb_get_max(rb_t *tree)
 }
 
 /* Check if the given node is present in the red-black tree.
+ * @tree: Pointer to the red-black tree.
+ * @node: Pointer to the node to search for.
  *
- * This function does not dereference the node pointer internally (though the
- * tree's "lessthan" callback might). It only tests for equality with nodes
- * already in the tree. As a result, it can be used to implement a "set"
- * construct by simply comparing the pointer value directly.
+ * This function searches the tree to determine if the specified node is
+ * present. It starts from the root and traverses the tree based on the
+ * comparison function until it finds the node or reaches a leaf. The function
+ * does not internally dereference the node pointer (though the tree's
+ * "cmp_func" callback might); it only tests for pointer equality with nodes
+ * already in the tree. As a result, this function can be used to implement a
+ * "set" construct by comparing pointers directly.
  */
 bool rb_contains(rb_t *tree, rb_node_t *node);
 
+/* Helper structure for non-recursive red-black tree traversal.
+ *
+ * This structure is used by the RB_FOREACH and RB_FOREACH_CONTAINER macros
+ * to perform an in-order traversal of a red-black tree without recursion. It
+ * maintains a dynamic stack of nodes and a corresponding array to indicate
+ * whether each node is a left child of its parent.
+ */
 typedef struct {
-    rb_node_t **stack;
-    bool *is_left;
-    int32_t top;
+    rb_node_t **stack; /**< Hold the nodes encountered during traversal */
+    bool *is_left;     /**< Track the relationship of each node to its parent */
+    int32_t top;       /**< Keeps track of the current position in the stack */
 } rb_foreach_t;
 
 #if _RB_DISABLE_ALLOCA == 0
@@ -137,21 +164,22 @@ typedef struct {
 
 rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f);
 
-/* Perform an in-order traversal of the tree without recursion.
+/* In-order traversal of a red-black tree without recursion.
+ * @tree: Pointer to the red-black tree ('rb_t') to traverse.
+ * @node: Name of a local variable of type 'rb_node_t *' to use as the iterator.
  *
- * This macro provides a non-recursive "foreach" loop for iterating through the
- * red-black tree, offering a moderate trade-off in code size.
+ * This macro performs an in-order traversal of the red-black tree using a
+ * non-recursive approach. It sets up a "foreach" loop for iterating through
+ * the nodes of the tree in sorted order. The macro avoids recursion by using
+ * an internal stack for traversal, providing a balance between code size
+ * and efficiency.
  *
- * Note that the loop is not safe for concurrent modifications. Any changes to
- * the tree structure during iteration may result in incorrect behavior, such as
- * nodes being skipped or visited multiple times.
- *
- * Additionally, the macro expands its arguments multiple times, so they should
- * not be expressions with side effects.
- *
- * @param tree A pointer to a "rb_t" to traverse
- * @param node The name of a local "rb_node_t *" variable to use as the
- *             iterator
+ * Notes:
+ * - This loop is not safe for concurrent modifications. Changing the tree
+ *   structure during traversal may result in undefined behavior, such as
+ *   nodes being skipped or visited multiple times.
+ * - The macro expands its arguments multiple times. Avoid using expressions
+ *   with side effects (e.g., function calls) as arguments.
  */
 #define RB_FOREACH(tree, node)                            \
     for (rb_foreach_t __f = _RB_FOREACH_INIT(tree, node); \
@@ -172,19 +200,23 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f);
     })
 #endif
 
-/* Iterate over an rbtree with implicit container field handling.
+/* In-order traversal of a red-black tree with container handling.
+ * @tree:  Pointer to the red-black tree ('rb_t') to traverse.
+ * @node:  Name of the local iterator variable, which is a pointer to the
+ * container type.
+ * @field: Name of the `rb_node_t` member within the container struct.
  *
- * Similar to RB_FOREACH(), but the "node" can be any type that includes a
- * "rb_node_t" member.
- * @param tree  A pointer to the "rb_t" to traverse.
- * @param node  The name of the local iterator variable.
- * @param field The name of the "rb_node_t" field within the node.
+ * This macro performs an in-order traversal of a red-black tree, similar to
+ * RB_FOREACH(). However, instead of iterating over raw 'rb_node_t' nodes, it
+ * iterates over user-defined container structs that embed an `rb_node_t`
+ * member. The macro automatically resolves the container type using the
+ * 'container_of' macro.
  */
 #define RB_FOREACH_CONTAINER(tree, node, field)                               \
     for (rb_foreach_t __f = _RB_FOREACH_INIT(tree, node); ({                  \
              rb_node_t *n = __rb_foreach_next(tree, &__f);                    \
              (node) = n ? container_of(n, __typeof__(*(node)), field) : NULL; \
-             (node);                                                          \
+             (node) != NULL;                                                  \
          });                                                                  \
          /**/)
 

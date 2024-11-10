@@ -4,6 +4,10 @@
 
 typedef enum { RED = 0, BLACK = 1 } rb_color_t;
 
+/* Retrieve the left or right child of a given node.
+ * @n:    Pointer to the current node.
+ * @side: Direction to traverse (0 for left, 1 for right).
+ */
 static inline rb_node_t *get_child(rb_node_t *n, uint8_t side)
 {
     if (side != 0U)
@@ -14,6 +18,11 @@ static inline rb_node_t *get_child(rb_node_t *n, uint8_t side)
     return (rb_node_t *) l;
 }
 
+/* Set the left or right child of a given node.
+ * @n:    Pointer to the current node.
+ * @side: Direction to set (0 for left, 1 for right).
+ * @val:  Pointer to the new child node.
+ */
 static inline void set_child(rb_node_t *n, uint8_t side, void *val)
 {
     if (side != 0U) {
@@ -26,6 +35,15 @@ static inline void set_child(rb_node_t *n, uint8_t side, void *val)
     }
 }
 
+/* The color information is stored in the least significant bit (LSB) of the
+ * left child pointer (i.e., children[0]). This function extracts the LSB using
+ * the bitwise AND operation, as 'rb_color_t' indicates.
+ *
+ * Using the LSB for color information is a common optimization in red-black
+ * trees. Most platform ABIs (application binary interface) align pointers to
+ * at least 2-byte boundaries, making the LSB available for metadata storage
+ * without affecting the pointer's validity.
+ */
 static inline rb_color_t get_color(rb_node_t *n)
 {
     return ((uintptr_t) n->children[0]) & 1UL;
@@ -47,33 +65,57 @@ static inline void set_color(rb_node_t *n, rb_color_t color)
     *p = (*p & ~1UL) | (uint8_t) color;
 }
 
-/* Traverse the red-black tree to find a node that either matches the given
- * "node" argument or reaches a leaf with an empty child pointer where the
- * "node" would be inserted. All nodes encountered are pushed onto the stack.
+/* Traverse the red-black tree and stack nodes along the path.
+ * @tree:  Pointer to the red-black tree.
+ * @node:  Node to search for or the position where it would be inserted.
+ * @stack: Array to hold the path of nodes encountered during traversal.
  *
- * Note: The tree must not be empty, and the stack must be large enough to hold
- * at least 'tree->max_depth' entries. Returns the number of nodes pushed onto
- * the stack.
+ * This function traverses the red-black tree starting from the root, looking
+ * for a node that either matches the given 'node' parameter or reaches a leaf
+ * where the 'node' would be inserted. All nodes along the traversal path are
+ * pushed onto the stack.
+ *
+ * Note:
+ * - The tree must not be empty.
+ * - The stack must be large enough to accommodate at least `tree->max_depth`
+ *   entries.
+ *
+ * Return: The number of nodes pushed onto the stack.
  */
 static int find_and_stack(rb_t *tree, rb_node_t *node, rb_node_t **stack)
 {
     int sz = 0;
-    stack[sz] = tree->root;
-    ++sz;
+    stack[sz++] = tree->root;
 
+    /* Traverse the tree, comparing the current node with the target node.
+     * Determine the direction based on the comparison function:
+     * - 'side = 0U' for left (target node is less than the current node).
+     * - 'side = 1U' for right (target node is greater than or equal to the
+     *   current node).
+     */
     while (stack[sz - 1] != node) {
         uint8_t side = tree->cmp_func(node, stack[sz - 1]) ? 0U : 1U;
         rb_node_t *ch = get_child(stack[sz - 1], side);
-
+        /* If there is no child in the chosen direction, the search ends. */
         if (!ch)
             break;
-        stack[sz] = ch;
-        ++sz;
+
+        /* Push the child node onto the stack and continue traversal. */
+        stack[sz++] = ch;
     }
 
     return sz;
 }
 
+/* Retrieve the minimum or maximum node from the red-black tree.
+ * @tree: Pointer to the red-black tree.
+ * @side: Direction to traverse (0 for left/minimum, 1 for right/maximum).
+ *
+ * This function traverses the tree starting from the root, following the
+ * specified direction ('side'). It continues moving left (for minimum) or
+ * right (for maximum) until reaching a leaf node, returning the last non-null
+ * node encountered.
+ */
 rb_node_t *__rb_get_minmax(rb_t *tree, uint8_t side)
 {
     rb_node_t *n;
@@ -82,6 +124,13 @@ rb_node_t *__rb_get_minmax(rb_t *tree, uint8_t side)
     return n;
 }
 
+/* Check if a child node is the left or right child.
+ * @parent: Pointer to the parent node.
+ * @child:  Pointer to the child node.
+ *
+ * Returns 1U if the 'child' is the right child of 'parent', otherwise returns
+ * '0U' (left child).
+ */
 static inline uint8_t get_side(rb_node_t *parent, const rb_node_t *child)
 {
     return (get_child(parent, 1U) == child) ? 1U : 0U;
@@ -101,25 +150,34 @@ static void rotate(rb_node_t **stack, int stacksz)
     rb_node_t *parent = stack[stacksz - 2];
     rb_node_t *child = stack[stacksz - 1];
     uint8_t side = get_side(parent, child);
+
+    /* Retrieve the child nodes for the rotation */
     rb_node_t *a = get_child(child, side);
     rb_node_t *b = get_child(child, (side == 0U) ? 1U : 0U);
 
+    /* Update the grandparent if it exists */
     if (stacksz >= 3) {
         rb_node_t *grandparent = stack[stacksz - 3];
-
         set_child(grandparent, get_side(grandparent, parent), child);
     }
 
+    /* Perform the rotation by updating child pointers */
     set_child(child, side, a);
     set_child(child, (side == 0U) ? 1U : 0U, parent);
     set_child(parent, side, b);
+
+    /* Update the stack to reflect the new positions */
     stack[stacksz - 2] = child;
     stack[stacksz - 1] = parent;
 }
 
-/* The top node on the given stack is red, and its parent is also red.
- * Iteratively restore the tree structure to maintain the red-black tree
- * properties.
+/* Resolve double-red violation in the red-black tree.
+ * @stack:   Array of node pointers representing the traversal path.
+ * @stacksz: Current size of the stack (number of nodes).
+ *
+ * This function fixes a red-red violation where both the top node and its
+ * parent are red. It iteratively restores the red-black tree properties
+ * by adjusting colors and performing rotations as needed.
  */
 static void fix_extra_red(rb_node_t **stack, int stacksz)
 {
@@ -127,7 +185,7 @@ static void fix_extra_red(rb_node_t **stack, int stacksz)
         rb_node_t *node = stack[stacksz - 1];
         rb_node_t *parent = stack[stacksz - 2];
 
-        /* Correct child colors are a precondition of the loop */
+        /* If the parent is black, the tree is already balanced. */
         if (is_black(parent))
             return;
 
@@ -135,6 +193,7 @@ static void fix_extra_red(rb_node_t **stack, int stacksz)
         uint8_t side = get_side(grandparent, parent);
         rb_node_t *aunt = get_child(grandparent, (side == 0U) ? 1U : 0U);
 
+        /* Case 1: The aunt is red. Recolor and move up the tree. */
         if (aunt && is_red(aunt)) {
             set_color(grandparent, RED);
             set_color(parent, BLACK);
@@ -147,25 +206,23 @@ static void fix_extra_red(rb_node_t **stack, int stacksz)
             continue;
         }
 
-        /* A local rotation can restore the entire tree structure. First, ensure
-         * that the node is on the same side of the parent as the parent is of
-         * the grandparent.
-         */
+        /* Case 2: The aunt is black. Perform rotations to restore balance. */
         uint8_t parent_side = get_side(parent, node);
 
+        /* If the node is on the opposite side of the parent, perform a rotation
+         * to align it with the grandparent's side.
+         */
         if (parent_side != side)
             rotate(stack, stacksz);
 
-        /* Rotate the grandparent with parent, swapping colors */
+        /* Rotate the grandparent with the parent and swap their colors. */
         rotate(stack, stacksz - 1);
         set_color(stack[stacksz - 3], BLACK);
         set_color(stack[stacksz - 2], RED);
         return;
     }
 
-    /* Exiting the loop indicates that the node has become the root, which must
-     * be black.
-     */
+    /* If the loop exits, the node has become the root, which must be black. */
     set_color(stack[0], BLACK);
 }
 
@@ -174,6 +231,7 @@ void rb_insert(rb_t *tree, rb_node_t *node)
     set_child(node, 0U, NULL);
     set_child(node, 1U, NULL);
 
+    /* If the tree is empty, set the new node as the root and color it black. */
     if (!tree->root) {
         tree->root = node;
         tree->max_depth = 1;
@@ -181,29 +239,35 @@ void rb_insert(rb_t *tree, rb_node_t *node)
         return;
     }
 
+    /* Allocate the stack for traversal. Use a fixed stack if alloca() is
+     * disabled.
+     */
 #if _RB_DISABLE_ALLOCA != 0
     rb_node_t **stack = &tree->iter_stack[0];
 #else
     rb_node_t *stack[tree->max_depth + 1];
 #endif
 
+    /* Find the insertion point and build the traversal stack. */
     int stacksz = find_and_stack(tree, node, stack);
-
     rb_node_t *parent = stack[stacksz - 1];
 
+    /* Determine the side (left or right) to insert the new node. */
     uint8_t side = tree->cmp_func(node, parent) ? 0U : 1U;
 
+    /* Link the new node to its parent and set its color to red. */
     set_child(parent, side, node);
     set_color(node, RED);
 
-    stack[stacksz] = node;
-    ++stacksz;
+    /* Push the new node onto the stack and fix any red-red violations. */
+    stack[stacksz++] = node;
     fix_extra_red(stack, stacksz);
 
+    /* Update the maximum depth of the tree if necessary. */
     if (stacksz > tree->max_depth)
         tree->max_depth = stacksz;
 
-    /* We may have rotated up into the root! */
+    /* Ensure the root is correctly updated after potential rotations. */
     tree->root = stack[0];
 }
 
@@ -239,8 +303,7 @@ static void fix_missing_black(rb_node_t **stack,
             rotate(stack, stacksz);
             set_color(parent, RED);
             set_color(sib, BLACK);
-            stack[stacksz] = n;
-            ++stacksz;
+            stack[stacksz++] = n;
 
             parent = stack[stacksz - 2];
             sib = get_child(parent, (n_side == 0U) ? 1U : 0U);
@@ -278,8 +341,7 @@ static void fix_missing_black(rb_node_t **stack,
             inner = get_child(sib, n_side);
 
             stack[stacksz - 1] = sib;
-            stack[stacksz] = inner;
-            ++stacksz;
+            stack[stacksz++] = inner;
             rotate(stack, stacksz);
             set_color(sib, RED);
             set_color(inner, BLACK);
@@ -311,33 +373,33 @@ static void fix_missing_black(rb_node_t **stack,
 void rb_remove(rb_t *tree, rb_node_t *node)
 {
     rb_node_t *tmp;
+
+    /* Allocate stack for traversal. Use a fixed stack if alloca() is disabled.
+     */
 #if _RB_DISABLE_ALLOCA != 0
     rb_node_t **stack = &tree->iter_stack[0];
 #else
     rb_node_t *stack[tree->max_depth + 1];
 #endif
 
+    /* Find the node to remove and build the traversal stack. */
     int stacksz = find_and_stack(tree, node, stack);
 
+    /* Node not found in the tree; return. */
     if (node != stack[stacksz - 1])
         return;
 
-    /* Only nodes with zero or one child can be removed directly. If the node
-     * has two children, select the largest child on the left side (or the
-     * smallest on the right side) and swap its position with the current node.
-     */
+    /* Case 1: Node has two children. Swap with the in-order predecessor. */
     if (get_child(node, 0U) && get_child(node, 1U)) {
         int stacksz0 = stacksz;
-        rb_node_t *hiparent, *loparent;
-        rb_node_t *node2 = get_child(node, 0U);
+        rb_node_t *hiparent = (stacksz > 1) ? stack[stacksz - 2] : NULL;
+        rb_node_t *loparent, *node2 = get_child(node, 0U);
 
-        hiparent = (stacksz > 1) ? stack[stacksz - 2] : NULL;
-        stack[stacksz] = node2;
-        ++stacksz;
+        /* Find the largest child on the left subtree (in-order predecessor). */
+        stack[stacksz++] = node2;
         while (get_child(node2, 1U)) {
             node2 = get_child(node2, 1U);
-            stack[stacksz] = node2;
-            ++stacksz;
+            stack[stacksz++] = node2;
         }
 
         loparent = stack[stacksz - 2];
@@ -375,21 +437,22 @@ void rb_remove(rb_t *tree, rb_node_t *node)
         set_child(node2, 1U, get_child(node, 1U));
         set_child(node, 1U, NULL);
 
+        /* Update the stack and swap the colors of 'node' and 'node2'. */
         tmp = stack[stacksz0 - 1];
         stack[stacksz0 - 1] = stack[stacksz - 1];
         stack[stacksz - 1] = tmp;
 
         rb_color_t ctmp = get_color(node);
-
         set_color(node, get_color(node2));
         set_color(node2, ctmp);
     }
 
+    /* Case 2: Node has zero or one child. Replace it with its child. */
     rb_node_t *child = get_child(node, 0U);
     if (!child)
         child = get_child(node, 1U);
 
-    /* Removing the root */
+    /* If removing the root node, update the root pointer. */
     if (stacksz < 2) {
         tree->root = child;
         if (child) {
@@ -410,20 +473,19 @@ void rb_remove(rb_t *tree, rb_node_t *node)
         if (is_black(node)) {
             fix_missing_black(stack, stacksz, node);
         } else {
-            /* Red childless nodes can just be dropped */
+            /* Red childless nodes can be removed directly. */
             set_child(parent, get_side(parent, node), NULL);
         }
     } else {
+        /* Replace the node with its single child. */
         set_child(parent, get_side(parent, node), child);
 
-        /* Check the node colors. If one is red (since a valid tree requires at
-         * least one to be black), the operation is complete.
-         */
+        /* If either the node or child is red, recolor the child to black. */
         if (is_red(node) || is_red(child))
             set_color(child, BLACK);
     }
 
-    /* We may have rotated up into the root! */
+    /* Update the root pointer after potential rotations. */
     tree->root = stack[0];
 }
 
