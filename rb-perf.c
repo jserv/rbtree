@@ -10,8 +10,6 @@
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
-#define TREE_SIZE 4096
-
 #define BIT(n) (1 << (n))
 
 /* Compute the floor of log2 for a compile-time constant.
@@ -55,9 +53,10 @@
      : (((n) & BIT(2)) == BIT(2))   ? 2  \
                                     : 1)
 
+#define TREE_SIZE BIT(16)
 static const uint32_t dlog_N = 2 * ilog2_compile_time(TREE_SIZE);
 
-/* rbnode structure is embeddable in user structure */
+/* rb_node_t is embeddable in user structure */
 struct container_node {
     rb_node_t node;
     int value;
@@ -65,7 +64,7 @@ struct container_node {
 static rb_node_t nodes[TREE_SIZE];
 static rb_t test_rbtree;
 
-/* Our "lessthan" is just the location of the struct */
+/* The comparator is just the location of the structure */
 static bool node_lessthan(rb_node_t *a, rb_node_t *b)
 {
     return a < b;
