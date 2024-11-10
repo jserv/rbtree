@@ -1,0 +1,5 @@
+*.a
+*.o
+*.o.d
+rb-perf
+rb-tests
