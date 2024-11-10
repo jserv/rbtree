@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/resource.h>
+#include <time.h>
 
 #include "rbtree.h"
 
@@ -98,6 +100,10 @@ int main()
 
     /* Test some operations of rbtree are running in logarithmic time */
 
+    struct timespec start, end;
+    int err = clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
+    assert(err == 0);
+
     /* The insert, remove, get minimum, and get maximum operations in the
      * 'rbtree' have logarithmic time complexity, determined by comparing the
      * height of the node's operation with the worst-case tree height.
@@ -120,5 +126,21 @@ int main()
     test = &nodes[TREE_SIZE / 2];
     verify_rbtree_perf(root, test);
 
+    err = clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end);
+    assert(err == 0);
+
+    double elapsed = (double) (end.tv_sec - start.tv_sec) +
+                     (double) (end.tv_nsec - start.tv_nsec) * 1e-9;
+
+    struct rusage usage;
+    err = getrusage(RUSAGE_SELF, &usage);
+    assert(err == 0);
+
+    /* Dump both machine and human readable versions */
+    printf(
+        "Operations performed on a red-black tree with %d nodes. Max RSS: %lu, "
+        "~%.3f µs per "
+        "loop\n",
+        TREE_SIZE, usage.ru_maxrss, elapsed / (double) TREE_SIZE * 1e6);
     return 0;
 }
