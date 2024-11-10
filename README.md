@@ -6,34 +6,34 @@ containing $N$ elements. It uses a standard red-black tree structure.
 
 ## Data Structure
 
-The `rbtree` tracking structure can be initialized anywhere in user-accessible
+The `rb_t` tracking structure can be initialized anywhere in user-accessible
 memory. It should contain only zero bits before first use, and no specific
 initialization API is needed.
 
 Unlike a linked list, where the position of elements is explicit, the ordering
-of nodes in an `rbtree` must be defined by a user-provided predicate function.
+of nodes in an `rb_t` must be defined by a user-provided predicate function.
 A function of type `rb_cmp_t` should be assigned to the `cmp_func` field of the
-`rbtree` structure before any tree operations are performed. This function must
+`rb_t` structure before any tree operations are performed. This function must
 return `true` if the first node argument is "less than" the second, according to
 the desired ordering. Note that "equal" values are not allowed; nodes within the
 tree must have a unique and fixed order for the algorithm to function correctly.
 
-Nodes within an `rbtree` are represented as an `rbnode` structure, which resides
-in user-managed memory, typically embedded within the data structure tracked by
-the tree. However, unlike linked list structures, the data within an `rbnode` is
-entirely opaque, and users cannot manually traverse the tree's binary topology
-as they can with lists.
+Nodes within an `rb_t` are represented as an `rb_node_t` structure, which
+resides  in user-managed memory, typically embedded within the data structure
+tracked by the tree. However, unlike linked list structures, the data within an
+`rb_node_t` is entirely opaque, and users cannot manually traverse the tree's
+binary topology as they can with lists.
 
-Nodes can be inserted into the tree with `rb_insert()` and removed with
-`rb_remove()`. The "first" and "last" nodes in the tree, as determined by the
-comparison function, can be accessed using `rb_get_min()` and `rb_get_max()`,
-respectively. Additionally, the `rb_contains()` function checks if a specific
+Nodes can be inserted into the tree with `rb_insert` and removed with
+`rb_remove`. The "first" and "last" nodes in the tree, as determined by the
+comparison function, can be accessed using `rb_get_min` and `rb_get_max`,
+respectively. Additionally, the `rb_contains` function checks if a specific
 node pointer exists within the tree. All of these operations have a maximum time
 complexity of $O(\log(N))$ based on the size of the tree.
 
 ### Operations
 
-One method is provided for iterating through all elements of an `rbtree` using
+One method is provided for iterating through all elements of an `rb_t` using
 the `RB_FOREACH` iterator. This iterator allows for a more natural iteration
 over the tree with a nested code block instead of a callback function. It is
 non-recursive but requires $O(\log(N))$ stack space by default. This
@@ -59,45 +59,45 @@ a series of tree rotations to restore balance after modifications.
 These rotations are conceptually built on a primitive operation that "swaps" the
 position of one node with another in the tree. While typical implementations
 achieve this by simply swapping the internal data pointers of the nodes, this
-approach cannot be used because the `rbnode` structure in this package is
+approach cannot be used because the `rb_node_t` structure in this package is
 intrusive. Instead, the package includes more complex logic to handle edge
 cases, such as when one of the swapped nodes is the root or when the nodes are
 already in a parent-child relationship.
 
-The `rbnode` structure for this package's `rbtree` only contains two pointers,
+The `rb_node_t` structure for this package's `rb_t` only contains two pointers,
 representing the "left" and "right" children of a node within the binary tree.
 However, during tree rebalancing after a modification, it is often necessary to
 traverse "upwards" from a node. In many red-black tree implementations, this is
 accomplished using an additional "parent" pointer. This package avoids the need
 for a third pointer by constructing a "stack" of node pointers locally as it
 traverses downward through the tree and updating it as needed during
-modifications. This way, the `rbtree` can be implemented without any additional
+modifications. This way, the `rb_t` can be implemented without any additional
 runtime storage overhead beyond that of a doubly-linked list.
 
 ```
 +-------------+     node 2 (black)
-| rbtree      |    +------------------+
-| * root ----------|     rbnode       |
+| rb_t        |    +------------------+
+| * root ----------|    rb_node_t     |
 | * max_depth |    | * left | * right |
 +-------------+    +----/---------\---+
                        /           \
        node 1 (black) /             \ node 4 (red)
       +------------------+       +------------------+
-      |     rbnode       |       |     rbnode       |
+      |    rb_node_t     |       |    rb_node_t     |
       | * left | * right |       | * left | * right |
       +----/---------\---+       +----/---------\---+
           /           \              /           \
        NULL           NULL          /             \
                         node 3 (black)        node 5 (black)
                        +------------------+  +------------------+
-                       |     rbnode       |  |     rbnode       |
+                       |    rb_node_t     |  |    rb_node_t     |
                        | * left | * right |  | * left | * right |
                        +----/---------\---+  +----/---------\---+
                            /           \         /           \
                         NULL           NULL    NULL           \
                                                      node 6 (red)
                                                    +------------------+
-                                                   |     rbnode       |
+                                                   |    rb_node_t     |
                                                    | * left | * right |
                                                    +----/---------\---+
                                                        /           \
