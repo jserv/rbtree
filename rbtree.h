@@ -1,16 +1,17 @@
 /*
- * This red-black tree implementation is optimized for minimal runtime memory
- * usage.
+ * This red-black tree implementation is optimized for minimal memory usage.
  *
- * The data structure is intrusive, meaning the rbnode handle is intended to be
- * embedded within a separate struct, similar to other structures like linked
- * lists. No data pointer is stored in the node.
+ * The data structure is intrusive, meaning that the node handle is designed
+ * to be embedded within a user-defined struct, similar to the doubly-linked
+ * list implementation in the Linux kernel. No additional data pointer is stored
+ * in the node itself.
+ * Reference: https://www.kernel.org/doc/html/latest/core-api/kernel-api.html#list-management-functions
  *
- * The color bit is combined with a pointer. Notably, there is no 'parent'
- * pointer stored in the node. Instead, the upper structure of the tree is
- * constructed dynamically using a stack during tree traversal. Thus, the
- * overall memory overhead of a node is limited to just two pointers, similar
- * to a doubly-linked list.
+ * The color bit is combined with one of the child pointers, reducing memory
+ * overhead. Importantly, this implementation does not store a 'parent' pointer.
+ * Instead, the tree's upper structure is managed dynamically using a stack
+ * during traversal. As a result, each node requires only two pointers, making
+ * the memory overhead comparable to that of a doubly-linked list.
  */
 
 #ifndef _RBTREE_H_

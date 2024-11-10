@@ -63,10 +63,10 @@ static void verify_rbtree_perf(rb_node_t *root, rb_node_t *test)
 
 int main()
 {
-    /* Verify if the 'rbnode' structure is embedded within a user-defined
-     * struct. This test initializes an 'rbtree' and checks two features:
-     * 1. The 'rbnode' structure can be embedded in any user-defined struct.
-     * 2. The 'rbtree' can be traversed using macro-based APIs.
+    /* Verify if the 'rb_node_t' structure is embedded within a user-defined
+     * struct. This test initializes an 'rb_t' and checks two features:
+     * 1. 'rb_node_t' structure can be embedded in any user-defined struct.
+     * 2. 'rb_t' can be traversed using macro-based APIs.
      */
     int count = 0;
     rb_t test_tree_l;
