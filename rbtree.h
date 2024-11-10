@@ -40,6 +40,8 @@
 #endif
 #endif
 
+typedef enum { RB_LEFT = 0, RB_RIGHT = 1 } rb_side_t;
+
 /* red-black tree node */
 typedef struct __rb_node {
     struct __rb_node *children[2];
@@ -83,9 +85,9 @@ typedef struct {
 typedef void (*rb_visit_t)(rb_node_t *node, void *cookie);
 
 /* forward declaration for helper functions, used for inlining */
-rb_node_t *__rb_child(rb_node_t *node, uint8_t side);
+rb_node_t *__rb_child(rb_node_t *node, rb_side_t side);
 int __rb_is_black(rb_node_t *node);
-rb_node_t *__rb_get_minmax(rb_t *tree, uint8_t side);
+rb_node_t *__rb_get_minmax(rb_t *tree, rb_side_t side);
 
 /* Insert a new node into the red-black tree.
  * @tree: Pointer to the red-black tree.
@@ -110,13 +112,13 @@ void rb_remove(rb_t *tree, rb_node_t *node);
 /* Return the lowest-sorted member of the red-black tree */
 static inline rb_node_t *rb_get_min(rb_t *tree)
 {
-    return __rb_get_minmax(tree, 0U);
+    return __rb_get_minmax(tree, RB_LEFT);
 }
 
 /* Return the highest-sorted member of the red-black tree */
 static inline rb_node_t *rb_get_max(rb_t *tree)
 {
-    return __rb_get_minmax(tree, 1U);
+    return __rb_get_minmax(tree, RB_RIGHT);
 }
 
 /* Check if the given node is present in the red-black tree.

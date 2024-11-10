@@ -6,38 +6,50 @@ typedef enum { RB_RED = 0, RB_BLACK = 1 } rb_color_t;
 
 /* Retrieve the left or right child of a given node.
  * @n:    Pointer to the current node.
- * @side: Direction to traverse (0 for left, 1 for right).
+ * @side: Direction to traverse.
  */
-static inline rb_node_t *get_child(rb_node_t *n, uint8_t side)
+static inline rb_node_t *get_child(rb_node_t *n, rb_side_t side)
 {
-    if (side != 0U)
-        return n->children[1];
+    if (side == RB_RIGHT)
+        return n->children[RB_RIGHT];
 
-    uintptr_t l = (uintptr_t) n->children[0];
+    /* Mask out the least significant bit (LSB) to retrieve the actual left
+     * child pointer.
+     *
+     * The LSB of the left child pointer is used to store metadata (e.g., the
+     * color bit). By masking out the LSB with & ~1UL, the function retrieves
+     * the actual pointer value without the metadata bit, ensuring the correct
+     * child node is returned.
+     */
+    uintptr_t l = (uintptr_t) n->children[RB_LEFT];
     l &= ~1UL;
     return (rb_node_t *) l;
 }
 
 /* Set the left or right child of a given node.
  * @n:    Pointer to the current node.
- * @side: Direction to set (0 for left, 1 for right).
+ * @side: Direction to set.
  * @val:  Pointer to the new child node.
  */
-static inline void set_child(rb_node_t *n, uint8_t side, void *val)
+static inline void set_child(rb_node_t *n, rb_side_t side, void *val)
 {
-    if (side != 0U) {
-        n->children[1] = val;
-    } else {
-        uintptr_t old = (uintptr_t) n->children[0];
-        uintptr_t new = (uintptr_t) val;
-
-        n->children[0] = (void *) (new | (old & 1UL));
+    if (side == RB_RIGHT) {
+        n->children[RB_RIGHT] = val;
+        return;
     }
+
+    uintptr_t old = (uintptr_t) n->children[RB_LEFT];
+    uintptr_t new = (uintptr_t) val;
+
+    /* Preserve the LSB of the old pointer (e.g., color bit) and set the new
+     * child.
+     */
+    n->children[RB_LEFT] = (void *) (new | (old & 1UL));
 }
 
-/* The color information is stored in the least significant bit (LSB) of the
- * left child pointer (i.e., children[0]). This function extracts the LSB using
- * the bitwise AND operation, as 'rb_color_t' indicates.
+/* The color information is stored in the LSB of the left child pointer (i.e.,
+ * children[0]). This function extracts the LSB using the bitwise AND operation,
+ * as 'rb_color_t' indicates.
  *
  * Using the LSB for color information is a common optimization in red-black
  * trees. Most platform ABIs (application binary interface) align pointers to
@@ -99,12 +111,12 @@ static int find_and_stack(rb_t *tree, rb_node_t *node, rb_node_t **stack)
 
     /* Traverse the tree, comparing the current node with the target node.
      * Determine the direction based on the comparison function:
-     * - 'side = 0U' for left (target node is less than the current node).
-     * - 'side = 1U' for right (target node is greater than or equal to the
-     *   current node).
+     * - left: target node is less than the current node.
+     * - right: target node is greater than or equal to the current node.
      */
     while (stack[sz - 1] != node) {
-        uint8_t side = tree->cmp_func(node, stack[sz - 1]) ? 0U : 1U;
+        rb_side_t side =
+            tree->cmp_func(node, stack[sz - 1]) ? RB_LEFT : RB_RIGHT;
         rb_node_t *ch = get_child(stack[sz - 1], side);
         /* If there is no child in the chosen direction, the search ends. */
         if (!ch)
@@ -119,14 +131,14 @@ static int find_and_stack(rb_t *tree, rb_node_t *node, rb_node_t **stack)
 
 /* Retrieve the minimum or maximum node from the red-black tree.
  * @tree: Pointer to the red-black tree.
- * @side: Direction to traverse (0 for left/minimum, 1 for right/maximum).
+ * @side: Direction to traverse (left/minimum or right/maximum).
  *
  * This function traverses the tree starting from the root, following the
  * specified direction ('side'). It continues moving left (for minimum) or
  * right (for maximum) until reaching a leaf node, returning the last non-null
  * node encountered.
  */
-rb_node_t *__rb_get_minmax(rb_t *tree, uint8_t side)
+rb_node_t *__rb_get_minmax(rb_t *tree, rb_side_t side)
 {
     rb_node_t *n;
     for (n = tree->root; n && get_child(n, side); n = get_child(n, side))
@@ -137,13 +149,10 @@ rb_node_t *__rb_get_minmax(rb_t *tree, uint8_t side)
 /* Check if a child node is the left or right child.
  * @parent: Pointer to the parent node.
  * @child:  Pointer to the child node.
- *
- * Returns 1U if the 'child' is the right child of 'parent', otherwise returns
- * '0U' (left child).
  */
-static inline uint8_t get_side(rb_node_t *parent, const rb_node_t *child)
+static inline rb_side_t get_side(rb_node_t *parent, const rb_node_t *child)
 {
-    return (get_child(parent, 1U) == child) ? 1U : 0U;
+    return (get_child(parent, RB_RIGHT) == child) ? RB_RIGHT : RB_LEFT;
 }
 
 /* Swap the positions of the two nodes at the top of the given stack, updating
@@ -159,11 +168,11 @@ static void rotate(rb_node_t **stack, int stacksz)
 {
     rb_node_t *parent = stack[stacksz - 2];
     rb_node_t *child = stack[stacksz - 1];
-    uint8_t side = get_side(parent, child);
+    rb_side_t side = get_side(parent, child);
 
     /* Retrieve the child nodes for the rotation */
     rb_node_t *a = get_child(child, side);
-    rb_node_t *b = get_child(child, (side == 0U) ? 1U : 0U);
+    rb_node_t *b = get_child(child, (side == RB_LEFT) ? RB_RIGHT : RB_LEFT);
 
     /* Update the grandparent if it exists */
     if (stacksz >= 3) {
@@ -173,7 +182,7 @@ static void rotate(rb_node_t **stack, int stacksz)
 
     /* Perform the rotation by updating child pointers */
     set_child(child, side, a);
-    set_child(child, (side == 0U) ? 1U : 0U, parent);
+    set_child(child, (side == RB_LEFT) ? RB_RIGHT : RB_LEFT, parent);
     set_child(parent, side, b);
 
     /* Update the stack to reflect the new positions */
@@ -200,8 +209,9 @@ static void fix_extra_red(rb_node_t **stack, int stacksz)
             return;
 
         rb_node_t *grandparent = stack[stacksz - 3];
-        uint8_t side = get_side(grandparent, parent);
-        rb_node_t *aunt = get_child(grandparent, (side == 0U) ? 1U : 0U);
+        rb_side_t side = get_side(grandparent, parent);
+        rb_node_t *aunt =
+            get_child(grandparent, (side == RB_LEFT) ? RB_RIGHT : RB_LEFT);
 
         /* Case 1: The aunt is red. Recolor and move up the tree. */
         if (aunt && is_red(aunt)) {
@@ -217,7 +227,7 @@ static void fix_extra_red(rb_node_t **stack, int stacksz)
         }
 
         /* Case 2: The aunt is black. Perform rotations to restore balance. */
-        uint8_t parent_side = get_side(parent, node);
+        rb_side_t parent_side = get_side(parent, node);
 
         /* If the node is on the opposite side of the parent, perform a rotation
          * to align it with the grandparent's side.
@@ -238,8 +248,8 @@ static void fix_extra_red(rb_node_t **stack, int stacksz)
 
 void rb_insert(rb_t *tree, rb_node_t *node)
 {
-    set_child(node, 0U, NULL);
-    set_child(node, 1U, NULL);
+    set_child(node, RB_LEFT, NULL);
+    set_child(node, RB_RIGHT, NULL);
 
     /* If the tree is empty, set the new node as the root and color it black. */
     if (!tree->root) {
@@ -263,7 +273,7 @@ void rb_insert(rb_t *tree, rb_node_t *node)
     rb_node_t *parent = stack[stacksz - 1];
 
     /* Determine the side (left or right) to insert the new node. */
-    uint8_t side = tree->cmp_func(node, parent) ? 0U : 1U;
+    rb_side_t side = tree->cmp_func(node, parent) ? RB_LEFT : RB_RIGHT;
 
     /* Link the new node to its parent and set its color to red. */
     set_child(parent, side, node);
@@ -301,8 +311,9 @@ static void fix_missing_black(rb_node_t **stack,
         rb_node_t *c0, *c1, *inner, *outer;
         rb_node_t *n = stack[stacksz - 1];
         rb_node_t *parent = stack[stacksz - 2];
-        uint8_t n_side = get_side(parent, n);
-        rb_node_t *sib = get_child(parent, (n_side == 0U) ? 1U : 0U);
+        rb_side_t n_side = get_side(parent, n);
+        rb_node_t *sib =
+            get_child(parent, (n_side == RB_LEFT) ? RB_RIGHT : RB_LEFT);
 
         /* Ensure the sibling is black, rotating N down a level if necessary.
          * After rotate(), the parent becomes the child of the previous sibling,
@@ -316,14 +327,14 @@ static void fix_missing_black(rb_node_t **stack,
             stack[stacksz++] = n;
 
             parent = stack[stacksz - 2];
-            sib = get_child(parent, (n_side == 0U) ? 1U : 0U);
+            sib = get_child(parent, (n_side == RB_LEFT) ? RB_RIGHT : RB_LEFT);
         }
 
         /* Situations where the sibling has only black children can be resolved
          * straightforwardly.
          */
-        c0 = get_child(sib, 0U);
-        c1 = get_child(sib, 1U);
+        c0 = get_child(sib, RB_LEFT);
+        c1 = get_child(sib, RB_RIGHT);
         if ((!c0 || is_black(c0)) && (!c1 || is_black(c1))) {
             if (n == null_node)
                 set_child(parent, n_side, NULL);
@@ -346,7 +357,7 @@ static void fix_missing_black(rb_node_t **stack,
          * far/outer child (i.e., on the opposite side of N) is guaranteed to
          * be red.
          */
-        outer = get_child(sib, (n_side == 0U) ? 1U : 0U);
+        outer = get_child(sib, (n_side == RB_LEFT) ? RB_RIGHT : RB_LEFT);
         if (!(outer && is_red(outer))) {
             inner = get_child(sib, n_side);
 
@@ -360,7 +371,7 @@ static void fix_missing_black(rb_node_t **stack,
              * updated sibling.
              */
             sib = stack[stacksz - 2];
-            outer = get_child(sib, (n_side == 0U) ? 1U : 0U);
+            outer = get_child(sib, (n_side == RB_LEFT) ? RB_RIGHT : RB_LEFT);
             stack[stacksz - 2] = n;
             stacksz--;
         }
@@ -400,15 +411,15 @@ void rb_remove(rb_t *tree, rb_node_t *node)
         return;
 
     /* Case 1: Node has two children. Swap with the in-order predecessor. */
-    if (get_child(node, 0U) && get_child(node, 1U)) {
+    if (get_child(node, RB_LEFT) && get_child(node, RB_RIGHT)) {
         int stacksz0 = stacksz;
         rb_node_t *hiparent = (stacksz > 1) ? stack[stacksz - 2] : NULL;
-        rb_node_t *loparent, *node2 = get_child(node, 0U);
+        rb_node_t *loparent, *node2 = get_child(node, RB_LEFT);
 
         /* Find the largest child on the left subtree (in-order predecessor). */
         stack[stacksz++] = node2;
-        while (get_child(node2, 1U)) {
-            node2 = get_child(node2, 1U);
+        while (get_child(node2, RB_RIGHT)) {
+            node2 = get_child(node2, RB_RIGHT);
             stack[stacksz++] = node2;
         }
 
@@ -435,17 +446,17 @@ void rb_remove(rb_t *tree, rb_node_t *node)
         }
 
         if (loparent == node) {
-            set_child(node, 0U, get_child(node2, 0U));
-            set_child(node2, 0U, node);
+            set_child(node, RB_LEFT, get_child(node2, RB_LEFT));
+            set_child(node2, RB_LEFT, node);
         } else {
             set_child(loparent, get_side(loparent, node2), node);
-            tmp = get_child(node, 0U);
-            set_child(node, 0U, get_child(node2, 0U));
-            set_child(node2, 0U, tmp);
+            tmp = get_child(node, RB_LEFT);
+            set_child(node, RB_LEFT, get_child(node2, RB_LEFT));
+            set_child(node2, RB_LEFT, tmp);
         }
 
-        set_child(node2, 1U, get_child(node, 1U));
-        set_child(node, 1U, NULL);
+        set_child(node2, RB_RIGHT, get_child(node, RB_RIGHT));
+        set_child(node, RB_RIGHT, NULL);
 
         /* Update the stack and swap the colors of 'node' and 'node2'. */
         tmp = stack[stacksz0 - 1];
@@ -458,9 +469,9 @@ void rb_remove(rb_t *tree, rb_node_t *node)
     }
 
     /* Case 2: Node has zero or one child. Replace it with its child. */
-    rb_node_t *child = get_child(node, 0U);
+    rb_node_t *child = get_child(node, RB_LEFT);
     if (!child)
-        child = get_child(node, 1U);
+        child = get_child(node, RB_RIGHT);
 
     /* If removing the root node, update the root pointer. */
     if (stacksz < 2) {
@@ -499,7 +510,7 @@ void rb_remove(rb_t *tree, rb_node_t *node)
     tree->root = stack[0];
 }
 
-rb_node_t *__rb_child(rb_node_t *node, uint8_t side)
+rb_node_t *__rb_child(rb_node_t *node, rb_side_t side)
 {
     return get_child(node, side);
 }
@@ -530,7 +541,7 @@ static rb_node_t *stack_left_limb(rb_node_t *n, rb_foreach_t *f)
     f->stack[f->top] = n;
     f->is_left[f->top] = false;
 
-    for (n = get_child(n, 0U); n; n = get_child(n, 0U)) {
+    for (n = get_child(n, RB_LEFT); n; n = get_child(n, RB_LEFT)) {
         f->top++;
         f->stack[f->top] = n;
         f->is_left[f->top] = true;
@@ -562,7 +573,7 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
     /* If the current node has a right child, traverse to the leftmost
      * descendant of the right subtree.
      */
-    rb_node_t *n = get_child(f->stack[f->top], 1U);
+    rb_node_t *n = get_child(f->stack[f->top], RB_RIGHT);
     if (n)
         return stack_left_limb(n, f);
 
