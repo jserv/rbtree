@@ -467,7 +467,8 @@ static rb_node_t *stack_left_limb(rb_node_t *n, rb_foreach_t *f)
     return f->stack[f->top];
 }
 
-/* The "foreach" traversal uses a dynamic stack allocated with alloca(3).
+/* The "foreach" traversal uses a dynamic stack allocated with alloca(3) or
+ * pre-allocated temporary space.
  * The current node is stored at stack[top], and its parent is located at
  * stack[top-1]. The is_left[] array keeps track of the relationship between
  * each node and its parent (i.e., if is_left[top] is true, then stack[top]
@@ -480,30 +481,29 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
     if (!tree->root)
         return NULL;
 
-    /* Initialization condition, pick the leftmost child of the
-     * root as our first node, initializing the stack on the way.
+    /* Initialization step: begin with the leftmost child of the root, setting
+     * up the stack as nodes are traversed.
      */
     if (f->top == -1)
         return stack_left_limb(tree->root, f);
 
-    /* The next child from a given node is the leftmost child of
-     * it's right subtree if it has a right child
+    /* If the current node has a right child, traverse to the leftmost
+     * descendant of the right subtree.
      */
     rb_node_t *n = get_child(f->stack[f->top], 1U);
     if (n)
         return stack_left_limb(n, f);
 
-    /* Otherwise if the node is a left child of its parent, the
-     * next node is the parent (note that the root is stacked
-     * above with is_left set to 0, so this condition still works
-     * even if node has no parent).
+    /* If the current node is a left child, the next node to visit is its
+     * parent. The root node is pushed with 'is_left' set to false, ensuring
+     * this condition is satisfied even if the node has no parent.
      */
     if (f->is_left[f->top])
         return f->stack[--f->top];
 
-    /* If we had no left tree and are a right child then our
-     * parent was already walked, so walk up the stack looking for
-     * a left child (whose parent is unwalked, and thus next).
+    /* If the current node is a right child with no left subtree, its parent
+     * has already been visited. Move up the stack to find the nearest left
+     * child whose parent has not been visited, as it will be the next node.
      */
     while ((f->top > 0) && (f->is_left[f->top] == false))
         f->top--;
