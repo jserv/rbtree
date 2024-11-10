@@ -181,7 +181,7 @@ void rb_insert(rb_t *tree, rb_node_t *node)
         return;
     }
 
-#ifdef RBTREE_DISABLE_ALLOCA
+#if _RB_DISABLE_ALLOCA != 0
     rb_node_t **stack = &tree->iter_stack[0];
 #else
     rb_node_t *stack[tree->max_depth + 1];
@@ -311,7 +311,7 @@ static void fix_missing_black(rb_node_t **stack,
 void rb_remove(rb_t *tree, rb_node_t *node)
 {
     rb_node_t *tmp;
-#ifdef RBTREE_DISABLE_ALLOCA
+#if _RB_DISABLE_ALLOCA != 0
     rb_node_t **stack = &tree->iter_stack[0];
 #else
     rb_node_t *stack[tree->max_depth + 1];

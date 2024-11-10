@@ -30,9 +30,9 @@
  *
  * Reference: https://nullprogram.com/blog/2019/10/28/
  */
-// #define RBTREE_DISABLE_ALLOCA 1
+#define _RB_DISABLE_ALLOCA 0
 
-#if !defined(RBTREE_DISABLE_ALLOCA)
+#if _RB_DISABLE_ALLOCA == 0
 #if defined(__GNUC__) || defined(__clang__)
 #define alloca __builtin_alloca
 #else
@@ -41,8 +41,8 @@
 #endif
 
 /* red-black tree node */
-typedef struct __rbnode {
-    struct __rbnode *children[2];
+typedef struct __rb_node {
+    struct __rb_node *children[2];
 } rb_node_t;
 
 /* Maximum theoretical depth of the tree, calculated based on pointer size.
@@ -51,10 +51,10 @@ typedef struct __rbnode {
  * including the root node. For 32-bit pointers, the maximum depth is 59 nodes,
  * while for 64-bit pointers, it is 121 nodes.
  */
-#define RBTREE_TBITS(t) ((sizeof(t)) < 8 ? 2 : 3)
-#define RBTREE_PBITS(t) (8 * sizeof(t))
-#define RBTREE_MAX_DEPTH \
-    (2 * (RBTREE_PBITS(int *) - RBTREE_TBITS(int *) - 1) + 1)
+#define _RB_PTR_TAG_BITS(t) ((sizeof(t)) < 8 ? 2 : 3)
+#define _RB_PTR_SIZE_BITS(t) (8 * sizeof(t))
+#define _RB_MAX_TREE_DEPTH \
+    (2 * (_RB_PTR_SIZE_BITS(int *) - _RB_PTR_TAG_BITS(int *) - 1) + 1)
 
 /* Red-black tree comparison predicate.
  *
@@ -64,8 +64,7 @@ typedef struct __rbnode {
  * During insertion, the node being inserted is always designated as "A", while
  * "B" refers to the existing node within the tree for comparison. This behavior
  * can be leveraged (with caution) to implement "most/least recently added"
- * semantics for nodes that would otherwise have equal
- * comparison values.
+ * semantics for nodes that would otherwise have equal comparison values.
  */
 typedef bool (*rb_cmp_t)(rb_node_t *a, rb_node_t *b);
 
@@ -74,9 +73,9 @@ typedef struct {
     rb_node_t *root;   /**< Root node of the tree */
     rb_cmp_t cmp_func; /**< Comparison function for nodes */
     int max_depth;
-#ifdef RBTREE_DISABLE_ALLOCA
-    rb_node_t *iter_stack[RBTREE_MAX_DEPTH];
-    bool iter_left[RBTREE_MAX_DEPTH];
+#if _RB_DISABLE_ALLOCA != 0
+    rb_node_t *iter_stack[_RB_MAX_TREE_DEPTH];
+    bool iter_left[_RB_MAX_TREE_DEPTH];
 #endif
 } rb_t;
 
@@ -120,19 +119,19 @@ typedef struct {
     int32_t top;
 } rb_foreach_t;
 
-#ifdef RBTREE_DISABLE_ALLOCA
-#define _RB_FOREACH_INIT(tree, node)      \
-    {                                     \
-        .stack = &(tree)->iter_stack[0],  \
-        .is_left = &(tree)->iter_left[0], \
-        .top = -1,                        \
-    }
-#else
+#if _RB_DISABLE_ALLOCA == 0
 #define _RB_FOREACH_INIT(tree, node)                              \
     {                                                             \
         .stack = alloca((tree)->max_depth * sizeof(rb_node_t *)), \
         .is_left = alloca((tree)->max_depth * sizeof(bool)),      \
         .top = -1,                                                \
+    }
+#else
+#define _RB_FOREACH_INIT(tree, node)      \
+    {                                     \
+        .stack = &(tree)->iter_stack[0],  \
+        .is_left = &(tree)->iter_left[0], \
+        .top = -1,                        \
     }
 #endif
 
