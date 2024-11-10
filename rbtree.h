@@ -44,7 +44,14 @@
 
 typedef enum { RB_LEFT = 0, RB_RIGHT = 1 } rb_side_t;
 
-/* red-black tree node */
+/* red-black tree node.
+ *
+ * Red-black trees often use an additional "parent" pointer for upward traversal
+ * during rebalancing after modifications. However, this avoids the need for
+ * a third pointer by using a local stack of node pointers constructed during
+ * downward traversal. This stack-based approach dynamically handles
+ * modifications without explicit parent pointers, reducing memory overhead.
+ */
 typedef struct __rb_node {
     struct __rb_node *children[2];
 } rb_node_t;

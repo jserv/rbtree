@@ -56,13 +56,14 @@ number of black nodes along any path from the root must be equal, and the number
 of red nodes must not exceed this count). This property is maintained using
 a series of tree rotations to restore balance after modifications.
 
-These rotations are conceptually built on a primitive operation that "swaps" the
-position of one node with another in the tree. While typical implementations
-achieve this by simply swapping the internal data pointers of the nodes, this
-approach cannot be used because the `rb_node_t` structure in this package is
-intrusive. Instead, the package includes more complex logic to handle edge
-cases, such as when one of the swapped nodes is the root or when the nodes are
-already in a parent-child relationship.
+These rotations are conceptually based on a primitive operation that "swaps" the
+positions of two nodes in the tree. In many implementations, this is done by
+simply exchanging the internal data pointers of the nodes. However, this package
+uses an intrusive `rb_node_t` structure, where the node metadata is embedded
+directly within the user-defined data structure. This design improves cache
+locality and eliminates additional memory allocations, but it also requires more
+complex logic to handle edge cases, such as when one of the nodes is the root or
+when the nodes have a parent-child relationship.
 
 The `rb_node_t` structure for this package's `rb_t` only contains two pointers,
 representing the "left" and "right" children of a node within the binary tree.
