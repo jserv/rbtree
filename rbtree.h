@@ -5,7 +5,8 @@
  * to be embedded within a user-defined struct, similar to the doubly-linked
  * list implementation in the Linux kernel. No additional data pointer is stored
  * in the node itself.
- * Reference: https://www.kernel.org/doc/html/latest/core-api/kernel-api.html#list-management-functions
+ * Reference:
+ * https://www.kernel.org/doc/html/latest/core-api/kernel-api.html#list-management-functions
  *
  * The color bit is combined with one of the child pointers, reducing memory
  * overhead. Importantly, this implementation does not store a 'parent' pointer.

@@ -11,8 +11,51 @@
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 #define TREE_SIZE 4096
-/* dlog_N = 2log(TREE_SIZE) */
-static const uint32_t dlog_N = 24;
+
+#define BIT(n) (1 << (n))
+
+/* Compute the floor of log2 for a compile-time constant.
+ * @n: The input value (32-bit unsigned integer).
+ *
+ * This function-like macro calculates the integer floor of log2 for a 32-bit
+ * unsigned integer. It should only be used with compile-time constants when
+ * the input value is known during preprocessing.
+ */
+#define ilog2_compile_time(n)            \
+    (((n) < 2)                      ? 0  \
+     : (((n) & BIT(31)) == BIT(31)) ? 31 \
+     : (((n) & BIT(30)) == BIT(30)) ? 30 \
+     : (((n) & BIT(29)) == BIT(29)) ? 29 \
+     : (((n) & BIT(28)) == BIT(28)) ? 28 \
+     : (((n) & BIT(27)) == BIT(27)) ? 27 \
+     : (((n) & BIT(26)) == BIT(26)) ? 26 \
+     : (((n) & BIT(25)) == BIT(25)) ? 25 \
+     : (((n) & BIT(24)) == BIT(24)) ? 24 \
+     : (((n) & BIT(23)) == BIT(23)) ? 23 \
+     : (((n) & BIT(22)) == BIT(22)) ? 22 \
+     : (((n) & BIT(21)) == BIT(21)) ? 21 \
+     : (((n) & BIT(20)) == BIT(20)) ? 20 \
+     : (((n) & BIT(19)) == BIT(19)) ? 19 \
+     : (((n) & BIT(18)) == BIT(18)) ? 18 \
+     : (((n) & BIT(17)) == BIT(17)) ? 17 \
+     : (((n) & BIT(16)) == BIT(16)) ? 16 \
+     : (((n) & BIT(15)) == BIT(15)) ? 15 \
+     : (((n) & BIT(14)) == BIT(14)) ? 14 \
+     : (((n) & BIT(13)) == BIT(13)) ? 13 \
+     : (((n) & BIT(12)) == BIT(12)) ? 12 \
+     : (((n) & BIT(11)) == BIT(11)) ? 11 \
+     : (((n) & BIT(10)) == BIT(10)) ? 10 \
+     : (((n) & BIT(9)) == BIT(9))   ? 9  \
+     : (((n) & BIT(8)) == BIT(8))   ? 8  \
+     : (((n) & BIT(7)) == BIT(7))   ? 7  \
+     : (((n) & BIT(6)) == BIT(6))   ? 6  \
+     : (((n) & BIT(5)) == BIT(5))   ? 5  \
+     : (((n) & BIT(4)) == BIT(4))   ? 4  \
+     : (((n) & BIT(3)) == BIT(3))   ? 3  \
+     : (((n) & BIT(2)) == BIT(2))   ? 2  \
+                                    : 1)
+
+static const uint32_t dlog_N = 2 * ilog2_compile_time(TREE_SIZE);
 
 /* rbnode structure is embeddable in user structure */
 struct container_node {
