@@ -63,7 +63,7 @@ static int find_and_stack(rb_t *tree, rb_node_t *node, rb_node_t **stack)
     ++sz;
 
     while (stack[sz - 1] != node) {
-        uint8_t side = tree->lessthan_fn(node, stack[sz - 1]) ? 0U : 1U;
+        uint8_t side = tree->cmp_func(node, stack[sz - 1]) ? 0U : 1U;
         rb_node_t *ch = get_child(stack[sz - 1], side);
 
         if (!ch)
@@ -192,7 +192,7 @@ void rb_insert(rb_t *tree, rb_node_t *node)
 
     rb_node_t *parent = stack[stacksz - 1];
 
-    uint8_t side = tree->lessthan_fn(node, parent) ? 0U : 1U;
+    uint8_t side = tree->cmp_func(node, parent) ? 0U : 1U;
 
     set_child(parent, side, node);
     set_color(node, RED);
@@ -443,7 +443,7 @@ bool rb_contains(rb_t *tree, rb_node_t *node)
     rb_node_t *n = tree->root;
 
     while (n && (n != node))
-        n = get_child(n, tree->lessthan_fn(n, node));
+        n = get_child(n, tree->cmp_func(n, node));
 
     return n == node;
 }

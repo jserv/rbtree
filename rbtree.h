@@ -67,14 +67,12 @@ typedef struct __rbnode {
  * semantics for nodes that would otherwise have equal
  * comparison values.
  */
-typedef bool (*rb_lessthan_t)(rb_node_t *a, rb_node_t *b);
+typedef bool (*rb_cmp_t)(rb_node_t *a, rb_node_t *b);
 
 /* Red-black tree structure */
 typedef struct {
-    /** Root node of the tree */
-    rb_node_t *root;
-    /** Comparison function for nodes in the tree */
-    rb_lessthan_t lessthan_fn;
+    rb_node_t *root;   /**< Root node of the tree */
+    rb_cmp_t cmp_func; /**< Comparison function for nodes */
     int max_depth;
 #ifdef RBTREE_DISABLE_ALLOCA
     rb_node_t *iter_stack[RBTREE_MAX_DEPTH];

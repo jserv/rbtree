@@ -12,12 +12,11 @@ initialization API is needed.
 
 Unlike a linked list, where the position of elements is explicit, the ordering
 of nodes in an `rbtree` must be defined by a user-provided predicate function.
-A function of type `rb_lessthan_t()` should be assigned to the `lessthan_fn`
-field of the `rbtree` structure before any tree operations are performed. This
-function must return `true` if the first node argument is "less than" the
-second, according to the desired ordering. Note that "equal" values are not
-allowed; nodes within the tree must have a unique and fixed order for the
-algorithm to function correctly.
+A function of type `rb_cmp_t` should be assigned to the `cmp_func` field of the
+`rbtree` structure before any tree operations are performed. This function must
+return `true` if the first node argument is "less than" the second, according to
+the desired ordering. Note that "equal" values are not allowed; nodes within the
+tree must have a unique and fixed order for the algorithm to function correctly.
 
 Nodes within an `rbtree` are represented as an `rbnode` structure, which resides
 in user-managed memory, typically embedded within the data structure tracked by

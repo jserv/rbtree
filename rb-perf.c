@@ -23,7 +23,7 @@ static rb_node_t nodes[TREE_SIZE];
 static rb_t test_rbtree;
 
 /* Our "lessthan" is just the location of the struct */
-bool node_lessthan(rb_node_t *a, rb_node_t *b)
+static bool node_lessthan(rb_node_t *a, rb_node_t *b)
 {
     return a < b;
 }
@@ -31,7 +31,7 @@ bool node_lessthan(rb_node_t *a, rb_node_t *b)
 /* initialize and insert a tree */
 static void init_tree(rb_t *tree, int size)
 {
-    tree->lessthan_fn = node_lessthan;
+    tree->cmp_func = node_lessthan;
 
     for (int i = 0; i < size; i++)
         rb_insert(tree, &nodes[i]);
@@ -48,8 +48,7 @@ static int search_height_recurse(rb_node_t *node,
         return current_height;
 
     current_height++;
-    rb_node_t *ch =
-        __rb_child(node, !test_rbtree.lessthan_fn(final_node, node));
+    rb_node_t *ch = __rb_child(node, !test_rbtree.cmp_func(final_node, node));
 
     return search_height_recurse(ch, final_node, current_height);
 }
@@ -78,7 +77,7 @@ int main()
     (void) memset(&test_tree_l, 0, sizeof(test_tree_l));
     (void) memset(tree_node, 0, sizeof(tree_node));
 
-    test_tree_l.lessthan_fn = node_lessthan;
+    test_tree_l.cmp_func = node_lessthan;
     for (uint32_t i = 0; i < ARRAY_SIZE(tree_node); i++) {
         tree_node[i].value = i;
         rb_insert(&test_tree_l, &tree_node[i].node);

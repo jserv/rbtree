@@ -42,7 +42,7 @@ int node_index(rb_node_t *n)
 }
 
 /* Our "lessthan" is just the location of the struct */
-bool node_lessthan(rb_node_t *a, rb_node_t *b)
+static bool node_lessthan(rb_node_t *a, rb_node_t *b)
 {
     if (current_insertee) {
         assert(a == current_insertee);
@@ -174,7 +174,7 @@ void test_tree(int size)
     int small_tree = size <= 32;
 
     (void) memset(&test_rbtree, 0, sizeof(test_rbtree));
-    test_rbtree.lessthan_fn = node_lessthan;
+    test_rbtree.cmp_func = node_lessthan;
     (void) memset(nodes, 0, sizeof(nodes));
     (void) memset(node_mask, 0, sizeof(node_mask));
 
@@ -225,7 +225,7 @@ int main()
 
         /* Initialize a tree and insert it */
         (void) memset(&test_rbtree, 0, sizeof(test_rbtree));
-        test_rbtree.lessthan_fn = node_lessthan;
+        test_rbtree.cmp_func = node_lessthan;
         (void) memset(nodes, 0, sizeof(nodes));
 
         assert(rb_get_min(&test_rbtree) == NULL && "the tree is invalid");
