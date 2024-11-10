@@ -1,6 +1,6 @@
 include mk/common.mk
 
-CFLAGS += -O2 -std=c99
+CFLAGS += -O2 -std=gnu99
 CFLAGS += -Wall -Wextra
 
 BIN := rb-tests rb-perf
