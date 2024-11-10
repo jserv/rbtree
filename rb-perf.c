@@ -4,13 +4,13 @@
 #include <stdio.h>
 #include <string.h>
 
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-
 #include "rbtree.h"
+
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 #define TREE_SIZE 4096
 /* dlog_N = 2log(TREE_SIZE) */
-const static uint32_t dlog_N = 24;
+static const uint32_t dlog_N = 24;
 
 /* rbnode structure is embeddable in user structure */
 struct container_node {
@@ -62,13 +62,10 @@ static void verify_rbtree_perf(struct rbnode *root, struct rbnode *test)
 
 int main()
 {
-    /*
-     * Test whether rbtree node struct is embedded
-     * in any user struct
-     *
-     * Define and initialize a rbtree, and test two features:
-     * first, rbtree node struct can be embedded in any user struct.
-     * last, rbtree can be walked though by some macro APIs.
+    /* Verify if the 'rbnode' structure is embedded within a user-defined
+     * struct. This test initializes an 'rbtree' and checks two features:
+     * 1. The 'rbnode' structure can be embedded in any user-defined struct.
+     * 2. The 'rbtree' can be traversed using macro-based APIs.
      */
     int count = 0;
     struct rbtree test_tree_l;
@@ -100,9 +97,10 @@ int main()
     }
 
     /* Test some operations of rbtree are running in logarithmic time */
-    /* The inserted, removed, get minimum and get maximum operations
-     * of rbtree are in logarithmic time by comparing a node's operation
-     * height with the worst-case's height.
+
+    /* The insert, remove, get minimum, and get maximum operations in the
+     * 'rbtree' have logarithmic time complexity, determined by comparing the
+     * height of the node's operation with the worst-case tree height.
      */
     init_tree(&test_rbtree, TREE_SIZE);
     struct rbnode *root = test_rbtree.root;
@@ -114,11 +112,13 @@ int main()
     test = rb_get_max(&test_rbtree);
     verify_rbtree_perf(root, test);
 
-    /* insert and remove a same node with same height.Assume that
-     * the node nodes[TREE_SIZE/2] will be removed and inserted,
-     * verify that searching times is less than 2logN
-     * using the height of this node.
+    /* Insert and remove the same node with an unchanged height.
+     * Assume the node nodes[TREE_SIZE/2] will be removed and reinserted.
+     * Verify that the search time is less than 2 * log(N) based on the height
+     * of this node.
      */
     test = &nodes[TREE_SIZE / 2];
     verify_rbtree_perf(root, test);
+
+    return 0;
 }

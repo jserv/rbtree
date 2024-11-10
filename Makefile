@@ -3,8 +3,6 @@ include mk/common.mk
 CFLAGS += -O2 -std=c99
 CFLAGS += -Wall -Wextra
 
-.PHONY: run bootstrap clean
-
 BIN := rb-tests rb-perf
 
 rb-tests: rbtree.o rb-tests.o
@@ -20,5 +18,6 @@ check: $(BIN)
 	./rb-tests
 	./rb-perf
 
+.PHONY: clean
 clean:
 	$(RM) $(BIN) *.o

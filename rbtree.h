@@ -1,15 +1,16 @@
 /*
- * This implementation is optimized for minimal runtime memory usage.
- * The data structure is intrusive, meaning the @ref rbnode handle is
- * intended to be embedded within a separate struct, similar to other
- * structures like linked lists. No data pointer is stored in the node.
+ * This red-black tree implementation is optimized for minimal runtime memory
+ * usage.
  *
- * The color bit is combined with a pointer (a common practice in such
- * libraries). Notably, there is no "parent" pointer stored in the
- * node. Instead, the upper structure of the tree is constructed
- * dynamically using a stack during tree traversal. Thus, the overall
- * memory overhead of a node is limited to just two pointers, similar
- * to a doubly linked list.
+ * The data structure is intrusive, meaning the rbnode handle is intended to be
+ * embedded within a separate struct, similar to other structures like linked
+ * lists. No data pointer is stored in the node.
+ *
+ * The color bit is combined with a pointer. Notably, there is no 'parent'
+ * pointer stored in the node. Instead, the upper structure of the tree is
+ * constructed dynamically using a stack during tree traversal. Thus, the
+ * overall memory overhead of a node is limited to just two pointers, similar
+ * to a doubly-linked list.
  */
 
 #ifndef _RBTREE_H_
@@ -94,13 +95,13 @@ void rb_insert(struct rbtree *tree, struct rbnode *node);
 /* Remove a node from the red-black tree */
 void rb_remove(struct rbtree *tree, struct rbnode *node);
 
-/* Return the lowest-sorted member of the tree */
+/* Return the lowest-sorted member of the red-black tree */
 static inline struct rbnode *rb_get_min(struct rbtree *tree)
 {
     return __rb_get_minmax(tree, 0U);
 }
 
-/* Return the highest-sorted member of the tree */
+/* Return the highest-sorted member of the red-black tree */
 static inline struct rbnode *rb_get_max(struct rbtree *tree)
 {
     return __rb_get_minmax(tree, 1U);
@@ -108,10 +109,10 @@ static inline struct rbnode *rb_get_max(struct rbtree *tree)
 
 /* Check if the given node is present in the red-black tree.
  *
- * This function does not dereference the node pointer internally (though
- * the tree's "lessthan" callback might). It only tests for equality with
- * nodes already in the tree. As a result, it can be used to implement a
- * "set" construct by simply comparing the pointer value directly.
+ * This function does not dereference the node pointer internally (though the
+ * tree's "lessthan" callback might). It only tests for equality with nodes
+ * already in the tree. As a result, it can be used to implement a "set"
+ * construct by simply comparing the pointer value directly.
  */
 bool rb_contains(struct rbtree *tree, struct rbnode *node);
 
@@ -176,8 +177,8 @@ struct rbnode *__rb_foreach_next(struct rbtree *tree, struct _rb_foreach *f);
 
 /* Iterate over an rbtree with implicit container field handling.
  *
- * Similar to RB_FOREACH(), but the "node" can be any type that
- * includes a "struct rbnode" member.
+ * Similar to RB_FOREACH(), but the "node" can be any type that includes a
+ * "struct rbnode" member.
  * @param tree  A pointer to the "struct rbtree" to traverse.
  * @param node  The name of the local iterator variable.
  * @param field The name of the "struct rbnode" field within the node.
