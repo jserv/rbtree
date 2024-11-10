@@ -41,9 +41,9 @@
 #endif
 
 /* red-black tree node */
-struct rbnode {
-    struct rbnode *children[2];
-};
+typedef struct __rbnode {
+    struct __rbnode *children[2];
+} rb_node_t;
 
 /* Maximum theoretical depth of the tree, calculated based on pointer size.
  * Assuming the memory is entirely filled with nodes containing two pointers,
@@ -67,42 +67,42 @@ struct rbnode {
  * semantics for nodes that would otherwise have equal
  * comparison values.
  */
-typedef bool (*rb_lessthan_t)(struct rbnode *a, struct rbnode *b);
+typedef bool (*rb_lessthan_t)(rb_node_t *a, rb_node_t *b);
 
 /* Red-black tree structure */
-struct rbtree {
+typedef struct {
     /** Root node of the tree */
-    struct rbnode *root;
+    rb_node_t *root;
     /** Comparison function for nodes in the tree */
     rb_lessthan_t lessthan_fn;
     int max_depth;
 #ifdef RBTREE_DISABLE_ALLOCA
-    struct rbnode *iter_stack[RBTREE_MAX_DEPTH];
+    rb_node_t *iter_stack[RBTREE_MAX_DEPTH];
     bool iter_left[RBTREE_MAX_DEPTH];
 #endif
-};
+} rb_t;
 
 /* Prototype for node visitor callback */
-typedef void (*rb_visit_t)(struct rbnode *node, void *cookie);
+typedef void (*rb_visit_t)(rb_node_t *node, void *cookie);
 
-struct rbnode *__rb_child(struct rbnode *node, uint8_t side);
-int __rb_is_black(struct rbnode *node);
-struct rbnode *__rb_get_minmax(struct rbtree *tree, uint8_t side);
+rb_node_t *__rb_child(rb_node_t *node, uint8_t side);
+int __rb_is_black(rb_node_t *node);
+rb_node_t *__rb_get_minmax(rb_t *tree, uint8_t side);
 
 /* Insert a node into the red-black tree */
-void rb_insert(struct rbtree *tree, struct rbnode *node);
+void rb_insert(rb_t *tree, rb_node_t *node);
 
 /* Remove a node from the red-black tree */
-void rb_remove(struct rbtree *tree, struct rbnode *node);
+void rb_remove(rb_t *tree, rb_node_t *node);
 
 /* Return the lowest-sorted member of the red-black tree */
-static inline struct rbnode *rb_get_min(struct rbtree *tree)
+static inline rb_node_t *rb_get_min(rb_t *tree)
 {
     return __rb_get_minmax(tree, 0U);
 }
 
 /* Return the highest-sorted member of the red-black tree */
-static inline struct rbnode *rb_get_max(struct rbtree *tree)
+static inline rb_node_t *rb_get_max(rb_t *tree)
 {
     return __rb_get_minmax(tree, 1U);
 }
@@ -114,13 +114,13 @@ static inline struct rbnode *rb_get_max(struct rbtree *tree)
  * already in the tree. As a result, it can be used to implement a "set"
  * construct by simply comparing the pointer value directly.
  */
-bool rb_contains(struct rbtree *tree, struct rbnode *node);
+bool rb_contains(rb_t *tree, rb_node_t *node);
 
-struct _rb_foreach {
-    struct rbnode **stack;
+typedef struct {
+    rb_node_t **stack;
     bool *is_left;
     int32_t top;
-};
+} rb_foreach_t;
 
 #ifdef RBTREE_DISABLE_ALLOCA
 #define _RB_FOREACH_INIT(tree, node)      \
@@ -130,15 +130,15 @@ struct _rb_foreach {
         .top = -1,                        \
     }
 #else
-#define _RB_FOREACH_INIT(tree, node)                                  \
-    {                                                                 \
-        .stack = alloca((tree)->max_depth * sizeof(struct rbnode *)), \
-        .is_left = alloca((tree)->max_depth * sizeof(bool)),          \
-        .top = -1,                                                    \
+#define _RB_FOREACH_INIT(tree, node)                              \
+    {                                                             \
+        .stack = alloca((tree)->max_depth * sizeof(rb_node_t *)), \
+        .is_left = alloca((tree)->max_depth * sizeof(bool)),      \
+        .top = -1,                                                \
     }
 #endif
 
-struct rbnode *__rb_foreach_next(struct rbtree *tree, struct _rb_foreach *f);
+rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f);
 
 /* Perform an in-order traversal of the tree without recursion.
  *
@@ -152,13 +152,13 @@ struct rbnode *__rb_foreach_next(struct rbtree *tree, struct _rb_foreach *f);
  * Additionally, the macro expands its arguments multiple times, so they should
  * not be expressions with side effects.
  *
- * @param tree A pointer to a "struct rbtree" to traverse
- * @param node The name of a local "struct rbnode *" variable to use as the
+ * @param tree A pointer to a "rb_t" to traverse
+ * @param node The name of a local "rb_node_t *" variable to use as the
  *             iterator
  */
-#define RB_FOREACH(tree, node)                                  \
-    for (struct _rb_foreach __f = _RB_FOREACH_INIT(tree, node); \
-         ((node) = __rb_foreach_next((tree), &__f));            \
+#define RB_FOREACH(tree, node)                            \
+    for (rb_foreach_t __f = _RB_FOREACH_INIT(tree, node); \
+         ((node) = __rb_foreach_next((tree), &__f));      \
          /**/)
 
 #ifndef container_of
@@ -178,14 +178,14 @@ struct rbnode *__rb_foreach_next(struct rbtree *tree, struct _rb_foreach *f);
 /* Iterate over an rbtree with implicit container field handling.
  *
  * Similar to RB_FOREACH(), but the "node" can be any type that includes a
- * "struct rbnode" member.
- * @param tree  A pointer to the "struct rbtree" to traverse.
+ * "rb_node_t" member.
+ * @param tree  A pointer to the "rb_t" to traverse.
  * @param node  The name of the local iterator variable.
- * @param field The name of the "struct rbnode" field within the node.
+ * @param field The name of the "rb_node_t" field within the node.
  */
 #define RB_FOREACH_CONTAINER(tree, node, field)                               \
-    for (struct _rb_foreach __f = _RB_FOREACH_INIT(tree, node); ({            \
-             struct rbnode *n = __rb_foreach_next(tree, &__f);                \
+    for (rb_foreach_t __f = _RB_FOREACH_INIT(tree, node); ({                  \
+             rb_node_t *n = __rb_foreach_next(tree, &__f);                    \
              (node) = n ? container_of(n, __typeof__(*(node)), field) : NULL; \
              (node);                                                          \
          });                                                                  \

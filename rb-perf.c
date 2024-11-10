@@ -14,20 +14,20 @@ static const uint32_t dlog_N = 24;
 
 /* rbnode structure is embeddable in user structure */
 struct container_node {
-    struct rbnode node;
+    rb_node_t node;
     int value;
 };
-static struct rbnode nodes[TREE_SIZE];
-static struct rbtree test_rbtree;
+static rb_node_t nodes[TREE_SIZE];
+static rb_t test_rbtree;
 
 /* Our "lessthan" is just the location of the struct */
-bool node_lessthan(struct rbnode *a, struct rbnode *b)
+bool node_lessthan(rb_node_t *a, rb_node_t *b)
 {
     return a < b;
 }
 
 /* initialize and insert a tree */
-static void init_tree(struct rbtree *tree, int size)
+static void init_tree(rb_t *tree, int size)
 {
     tree->lessthan_fn = node_lessthan;
 
@@ -35,8 +35,8 @@ static void init_tree(struct rbtree *tree, int size)
         rb_insert(tree, &nodes[i]);
 }
 
-static int search_height_recurse(struct rbnode *node,
-                                 struct rbnode *final_node,
+static int search_height_recurse(rb_node_t *node,
+                                 rb_node_t *final_node,
                                  uint32_t current_height)
 {
     if (!node)
@@ -46,13 +46,13 @@ static int search_height_recurse(struct rbnode *node,
         return current_height;
 
     current_height++;
-    struct rbnode *ch =
+    rb_node_t *ch =
         __rb_child(node, !test_rbtree.lessthan_fn(final_node, node));
 
     return search_height_recurse(ch, final_node, current_height);
 }
 
-static void verify_rbtree_perf(struct rbnode *root, struct rbnode *test)
+static void verify_rbtree_perf(rb_node_t *root, rb_node_t *test)
 {
     uint32_t node_height = 0;
 
@@ -68,9 +68,9 @@ int main()
      * 2. The 'rbtree' can be traversed using macro-based APIs.
      */
     int count = 0;
-    struct rbtree test_tree_l;
+    rb_t test_tree_l;
     struct container_node *c_foreach_node;
-    struct rbnode *foreach_node;
+    rb_node_t *foreach_node;
     struct container_node tree_node[10];
 
     (void) memset(&test_tree_l, 0, sizeof(test_tree_l));
@@ -103,8 +103,8 @@ int main()
      * height of the node's operation with the worst-case tree height.
      */
     init_tree(&test_rbtree, TREE_SIZE);
-    struct rbnode *root = test_rbtree.root;
-    struct rbnode *test = NULL;
+    rb_node_t *root = test_rbtree.root;
+    rb_node_t *test = NULL;
 
     test = rb_get_min(&test_rbtree);
     verify_rbtree_perf(root, test);

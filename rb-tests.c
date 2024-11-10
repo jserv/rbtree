@@ -6,18 +6,18 @@
 
 #define MAX_NODES 256
 
-static struct rbtree test_rbtree;
+static rb_t test_rbtree;
 
-static struct rbnode nodes[MAX_NODES];
+static rb_node_t nodes[MAX_NODES];
 
 /* Bit is set if node is in the tree */
 static unsigned int node_mask[(MAX_NODES + 31) / 32];
 
 /* Array of nodes dumped via traversal */
-static struct rbnode *walked_nodes[MAX_NODES];
+static rb_node_t *walked_nodes[MAX_NODES];
 
 /* Node currently being inserted, for testing lessthan() argument order */
-static struct rbnode *current_insertee;
+static rb_node_t *current_insertee;
 
 void set_node_mask(int node, int val)
 {
@@ -36,13 +36,13 @@ int get_node_mask(int node)
     return !!(*p & bit);
 }
 
-int node_index(struct rbnode *n)
+int node_index(rb_node_t *n)
 {
     return (int) (n - &nodes[0]);
 }
 
 /* Our "lessthan" is just the location of the struct */
-bool node_lessthan(struct rbnode *a, struct rbnode *b)
+bool node_lessthan(rb_node_t *a, rb_node_t *b)
 {
     if (current_insertee) {
         assert(a == current_insertee);
@@ -68,7 +68,7 @@ static unsigned int next_rand_mod(unsigned int mod)
     return ((unsigned int) (state >> 32)) % mod;
 }
 
-void visit_node(struct rbnode *node, void *cookie)
+void visit_node(rb_node_t *node, void *cookie)
 {
     int *nwalked = cookie;
 
@@ -83,12 +83,12 @@ void visit_node(struct rbnode *node, void *cookie)
  */
 static int last_black_height;
 
-void check_rbnode(struct rbnode *node, int blacks_above)
+void check_rbnode(rb_node_t *node, int blacks_above)
 {
     int side, bheight = blacks_above + __rb_is_black(node);
 
     for (side = 0; side < 2; side++) {
-        struct rbnode *ch = __rb_child(node, side);
+        rb_node_t *ch = __rb_child(node, side);
 
         if (ch) {
             /* Basic tree requirement */
@@ -128,7 +128,7 @@ void check_rb(void)
 void check_tree(void)
 {
     int nwalked = 0, i, ni;
-    struct rbnode *n, *last = NULL;
+    rb_node_t *n, *last = NULL;
 
     (void) memset(walked_nodes, 0, sizeof(walked_nodes));
 
@@ -221,7 +221,7 @@ int main()
     /* Test removing a node with abnormal color */
     {
         printf("Removing a node with abnormal color...\n");
-        struct rbnode temp = {0};
+        rb_node_t temp = {0};
 
         /* Initialize a tree and insert it */
         (void) memset(&test_rbtree, 0, sizeof(test_rbtree));
