@@ -4,7 +4,7 @@
 
 typedef enum { RED = 0, BLACK = 1 } rb_color_t;
 
-static rb_node_t *get_child(rb_node_t *n, uint8_t side)
+static inline rb_node_t *get_child(rb_node_t *n, uint8_t side)
 {
     if (side != 0U)
         return n->children[1];
@@ -14,7 +14,7 @@ static rb_node_t *get_child(rb_node_t *n, uint8_t side)
     return (rb_node_t *) l;
 }
 
-static void set_child(rb_node_t *n, uint8_t side, void *val)
+static inline void set_child(rb_node_t *n, uint8_t side, void *val)
 {
     if (side != 0U) {
         n->children[1] = val;
@@ -26,7 +26,7 @@ static void set_child(rb_node_t *n, uint8_t side, void *val)
     }
 }
 
-static rb_color_t get_color(rb_node_t *n)
+static inline rb_color_t get_color(rb_node_t *n)
 {
     return ((uintptr_t) n->children[0]) & 1UL;
 }
@@ -41,10 +41,9 @@ static inline bool is_red(rb_node_t *n)
     return get_color(n) == RED;
 }
 
-static void set_color(rb_node_t *n, rb_color_t color)
+static inline void set_color(rb_node_t *n, rb_color_t color)
 {
     uintptr_t *p = (void *) &n->children[0];
-
     *p = (*p & ~1UL) | (uint8_t) color;
 }
 
@@ -83,7 +82,7 @@ rb_node_t *__rb_get_minmax(rb_t *tree, uint8_t side)
     return n;
 }
 
-static uint8_t get_side(rb_node_t *parent, const rb_node_t *child)
+static inline uint8_t get_side(rb_node_t *parent, const rb_node_t *child)
 {
     return (get_child(parent, 1U) == child) ? 1U : 0U;
 }
@@ -453,7 +452,7 @@ bool rb_contains(rb_t *tree, rb_node_t *node)
  * iterate. By design, the node is always a right child or the root, so
  * "is_left" must be false.
  */
-static inline rb_node_t *stack_left_limb(rb_node_t *n, rb_foreach_t *f)
+static rb_node_t *stack_left_limb(rb_node_t *n, rb_foreach_t *f)
 {
     f->top++;
     f->stack[f->top] = n;
