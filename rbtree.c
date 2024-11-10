@@ -4,6 +4,22 @@
 
 typedef enum { RB_RED = 0, RB_BLACK = 1 } rb_color_t;
 
+/* The implementation of red-black trees contains redundancy, as many scenarios
+ * have a corresponding mirrored case that is solved in the same way, except
+ * with left and right children swapped. This inherent symmetry can be leveraged
+ * to reduce the code size for insertion and deletion by half, using the
+ * relative term "sibling" instead of the absolute terms "left" and "right."
+ *
+ * To fully exploit this symmetry, it is crucial that the sibling node can be
+ * retrieved efficiently. This can be achieved by storing the children in a
+ * two-element array rather than using separate left and right pointers. The
+ * array-based approach offers an unexpected advantage: efficient access to the
+ * sibling node. In this design, the index of a child node can be represented by
+ * 0 (left) or 1 (right), and its sibling is easily obtained using logical
+ * negation (`!i`), avoiding the need for explicit comparisons to determine
+ * which child is in hand before selecting the opposite one.
+ */
+
 /* Retrieve the left or right child of a given node.
  * @n:    Pointer to the current node.
  * @side: Direction to traverse.

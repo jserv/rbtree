@@ -1,6 +1,10 @@
 /*
  * This red-black tree implementation is optimized for minimal memory usage.
  *
+ * A red-black tree is a self-balancing binary search tree that functions as
+ * a dynamic ordered dictionary, as long as the elements can be arranged in a
+ * strict weak order.
+ *
  * The data structure is intrusive, meaning that the node handle is designed
  * to be embedded within a user-defined struct, similar to the doubly-linked
  * list implementation in the Linux kernel. No additional data pointer is stored
