@@ -176,9 +176,11 @@ static inline rb_side_t get_side(rb_node_t *parent, const rb_node_t *child)
  * This operation performs the following transformation (or its mirror image if
  * node N is on the opposite side of P):
  *
- *    P          N
- *  N  c  -->  a   P
- * a b            b c
+ *        P          N
+ *       /\         /\
+ *      N  c  -->  a   P
+ *     /\             /\
+ *    a  b           b  c
  */
 static void rotate(rb_node_t **stack, int stacksz)
 {

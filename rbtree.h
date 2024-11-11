@@ -139,7 +139,7 @@ static inline rb_node_t *rb_get_max(rb_t *tree)
  * present. It starts from the root and traverses the tree based on the
  * comparison function until it finds the node or reaches a leaf. The function
  * does not internally dereference the node pointer (though the tree's
- * "cmp_func" callback might); it only tests for pointer equality with nodes
+ * 'cmp_func' callback might); it only tests for pointer equality with nodes
  * already in the tree. As a result, this function can be used to implement a
  * "set" construct by comparing pointers directly.
  */
@@ -215,12 +215,12 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f);
 /* In-order traversal of a red-black tree with container handling.
  * @tree:  Pointer to the red-black tree ('rb_t') to traverse.
  * @node:  Name of the local iterator variable, which is a pointer to the
- * container type.
- * @field: Name of the `rb_node_t` member within the container struct.
+ *         container type.
+ * @field: Name of the 'rb_node_t' member within the container struct.
  *
  * This macro performs an in-order traversal of a red-black tree, similar to
- * RB_FOREACH(). However, instead of iterating over raw 'rb_node_t' nodes, it
- * iterates over user-defined container structs that embed an `rb_node_t`
+ * RB_FOREACH. However, instead of iterating over raw 'rb_node_t' nodes, it
+ * iterates over user-defined container structs that embed an 'rb_node_t'
  * member. The macro automatically resolves the container type using the
  * 'container_of' macro.
  */
@@ -228,7 +228,7 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f);
     for (rb_foreach_t __f = _RB_FOREACH_INIT(tree, node); ({                  \
              rb_node_t *n = __rb_foreach_next(tree, &__f);                    \
              (node) = n ? container_of(n, __typeof__(*(node)), field) : NULL; \
-             (node) != NULL;                                                  \
+             (node);                                                          \
          });                                                                  \
          /**/)
 
