@@ -16,7 +16,7 @@ static unsigned int node_mask[(MAX_NODES + 31) / 32];
 /* Array of nodes dumped via traversal */
 static rb_node_t *walked_nodes[MAX_NODES];
 
-/* Node currently being inserted, for testing lessthan() argument order */
+/* Node currently being inserted, for testing 'cmp' argument order */
 static rb_node_t *current_insertee;
 
 void set_node_mask(int node, int val)
@@ -30,19 +30,19 @@ void set_node_mask(int node, int val)
 
 int get_node_mask(int node)
 {
-    unsigned int *p = &node_mask[node / 32];
+    const unsigned int *p = &node_mask[node / 32];
     unsigned int bit = 1u << (node % 32);
 
     return !!(*p & bit);
 }
 
-int node_index(rb_node_t *n)
+int node_index(const rb_node_t *n)
 {
     return (int) (n - &nodes[0]);
 }
 
 /* Our "lessthan" is just the location of the struct */
-static bool node_lessthan(rb_node_t *a, rb_node_t *b)
+static bool node_lessthan(const rb_node_t *a, const rb_node_t *b)
 {
     if (current_insertee) {
         assert(a == current_insertee);

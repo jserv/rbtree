@@ -81,7 +81,7 @@ typedef struct __rb_node {
  * can be leveraged (with caution) to implement "most/least recently added"
  * semantics for nodes that would otherwise have equal comparison values.
  */
-typedef bool (*rb_cmp_t)(rb_node_t *a, rb_node_t *b);
+typedef bool (*rb_cmp_t)(const rb_node_t *a, const rb_node_t *b);
 
 /* Red-black tree structure */
 typedef struct {

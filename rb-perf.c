@@ -65,7 +65,7 @@ static rb_node_t nodes[TREE_SIZE];
 static rb_t test_rbtree;
 
 /* The comparator is just the location of the structure */
-static bool node_lessthan(rb_node_t *a, rb_node_t *b)
+static bool node_lessthan(const rb_node_t *a, const rb_node_t *b)
 {
     return a < b;
 }
@@ -112,8 +112,6 @@ int main()
      */
     int count = 0;
     rb_t test_tree_l;
-    struct container_node *c_foreach_node;
-    rb_node_t *foreach_node;
     struct container_node tree_node[10];
 
     (void) memset(&test_tree_l, 0, sizeof(test_tree_l));
@@ -125,8 +123,9 @@ int main()
         rb_insert(&test_tree_l, &tree_node[i].node);
     }
 
-    RB_FOREACH (&test_tree_l, foreach_node) {
-        assert(container_of(foreach_node, struct container_node, node)->value ==
+    rb_node_t *each;
+    RB_FOREACH (&test_tree_l, each) {
+        assert(container_of(each, struct container_node, node)->value ==
                    count &&
                "RB_FOREACH failed");
         count++;
@@ -134,8 +133,9 @@ int main()
 
     count = 0;
 
-    RB_FOREACH_CONTAINER (&test_tree_l, c_foreach_node, node) {
-        assert(c_foreach_node->value == count && "RB_FOREACH_CONTAINER failed");
+    struct container_node *c_each;
+    RB_FOREACH_CONTAINER (&test_tree_l, c_each, node) {
+        assert(c_each->value == count && "RB_FOREACH_CONTAINER failed");
         count++;
     }
 
@@ -177,7 +177,7 @@ int main()
     err = getrusage(RUSAGE_SELF, &usage);
     assert(err == 0);
 
-    /* Dump both machine and human readable versions */
+    /* Dump statistics */
     printf(
         "Operations performed on a red-black tree with %d nodes. Max RSS: %lu, "
         "~%.3f µs per iteration\n",

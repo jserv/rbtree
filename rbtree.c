@@ -217,7 +217,7 @@ static void rotate(rb_node_t **stack, int stacksz)
 static void fix_extra_red(rb_node_t **stack, int stacksz)
 {
     while (stacksz > 1) {
-        rb_node_t *node = stack[stacksz - 1];
+        const rb_node_t *node = stack[stacksz - 1];
         rb_node_t *parent = stack[stacksz - 2];
 
         /* If the parent is black, the tree is already balanced. */
