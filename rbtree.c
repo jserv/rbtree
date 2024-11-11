@@ -74,7 +74,7 @@ static inline void set_child(rb_node_t *n, rb_side_t side, void *val)
  */
 static inline rb_color_t get_color(rb_node_t *n)
 {
-    return ((uintptr_t) n->children[0]) & 1UL;
+    return ((uintptr_t) n->children[0]) & 1UL ? RB_BLACK : RB_RED;
 }
 
 static inline bool is_black(rb_node_t *n)
