@@ -95,7 +95,7 @@ static int search_height_recurse(rb_node_t *node,
     return search_height_recurse(ch, final_node, current_height);
 }
 
-static void verify_rbtree_perf(rb_node_t *root, rb_node_t *test)
+static void verify_rbtree(rb_node_t *root, rb_node_t *test)
 {
     uint32_t node_height = 0;
 
@@ -154,18 +154,18 @@ int main()
     rb_node_t *test = NULL;
 
     test = rb_get_min(&test_rbtree);
-    verify_rbtree_perf(root, test);
+    verify_rbtree(root, test);
 
     test = rb_get_max(&test_rbtree);
-    verify_rbtree_perf(root, test);
+    verify_rbtree(root, test);
 
-    /* Insert and remove the same node with an unchanged height.
-     * Assume the node nodes[TREE_SIZE/2] will be removed and reinserted.
-     * Verify that the search time is less than 2 * log(N) based on the height
+    /* Insert and remove the same node while maintaining the same height.
+     * Assume that nodes[TREE_SIZE / 2] will be removed and reinserted.
+     * Verify that the search time is less than 2 * log(N), based on the height
      * of this node.
      */
     test = &nodes[TREE_SIZE / 2];
-    verify_rbtree_perf(root, test);
+    verify_rbtree(root, test);
 
     err = clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end);
     assert(err == 0);
@@ -180,8 +180,7 @@ int main()
     /* Dump both machine and human readable versions */
     printf(
         "Operations performed on a red-black tree with %d nodes. Max RSS: %lu, "
-        "~%.3f µs per "
-        "loop\n",
+        "~%.3f µs per iteration\n",
         TREE_SIZE, usage.ru_maxrss, elapsed / (double) TREE_SIZE * 1e6);
     return 0;
 }
