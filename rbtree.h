@@ -94,9 +94,6 @@ typedef struct {
 #endif
 } rb_t;
 
-/* Prototype for node visitor callback */
-typedef void (*rb_visit_t)(rb_node_t *node, void *cookie);
-
 /* forward declaration for helper functions, used for inlining */
 rb_node_t *__rb_child(rb_node_t *node, rb_side_t side);
 int __rb_is_black(rb_node_t *node);
