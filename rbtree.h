@@ -36,7 +36,9 @@
  *
  * Reference: https://nullprogram.com/blog/2019/10/28/
  */
+#ifndef _RB_DISABLE_ALLOCA
 #define _RB_DISABLE_ALLOCA 0
+#endif
 
 #if _RB_DISABLE_ALLOCA == 0
 #if defined(__GNUC__) || defined(__clang__)
@@ -159,11 +161,11 @@ typedef struct {
 } rb_foreach_t;
 
 #if _RB_DISABLE_ALLOCA == 0
-#define _RB_FOREACH_INIT(tree, node)                              \
-    {                                                             \
-        .stack = alloca((tree)->max_depth * sizeof(rb_node_t *)), \
-        .is_left = alloca((tree)->max_depth * sizeof(bool)),      \
-        .top = -1,                                                \
+#define _RB_FOREACH_INIT(tree, node)                               \
+    {                                                              \
+        .stack = alloca(_RB_MAX_TREE_DEPTH * sizeof(rb_node_t *)), \
+        .is_left = alloca(_RB_MAX_TREE_DEPTH * sizeof(bool)),      \
+        .top = -1,                                                 \
     }
 #else
 #define _RB_FOREACH_INIT(tree, node)      \

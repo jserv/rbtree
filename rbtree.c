@@ -130,7 +130,7 @@ static int find_and_stack(rb_t *tree, rb_node_t *node, rb_node_t **stack)
      * - left: target node is less than the current node.
      * - right: target node is greater than or equal to the current node.
      */
-    while (stack[sz - 1] != node) {
+    while (stack[sz - 1] != node && sz < (int) (_RB_MAX_TREE_DEPTH - 1)) {
         rb_side_t side =
             tree->cmp_func(node, stack[sz - 1]) ? RB_LEFT : RB_RIGHT;
         rb_node_t *ch = get_child(stack[sz - 1], side);
@@ -283,7 +283,7 @@ void rb_insert(rb_t *tree, rb_node_t *node)
 #if _RB_DISABLE_ALLOCA != 0
     rb_node_t **stack = &tree->iter_stack[0];
 #else
-    rb_node_t *stack[tree->max_depth + 1];
+    rb_node_t *stack[_RB_MAX_TREE_DEPTH];
 #endif
 
     /* Find the insertion point and build the traversal stack. */
@@ -418,7 +418,7 @@ void rb_remove(rb_t *tree, rb_node_t *node)
 #if _RB_DISABLE_ALLOCA != 0
     rb_node_t **stack = &tree->iter_stack[0];
 #else
-    rb_node_t *stack[tree->max_depth + 1];
+    rb_node_t *stack[_RB_MAX_TREE_DEPTH];
 #endif
 
     /* Find the node to remove and build the traversal stack. */
@@ -435,8 +435,10 @@ void rb_remove(rb_t *tree, rb_node_t *node)
         rb_node_t *loparent, *node2 = get_child(node, RB_LEFT);
 
         /* Find the largest child on the left subtree (in-order predecessor). */
-        stack[stacksz++] = node2;
-        while (get_child(node2, RB_RIGHT)) {
+        if (stacksz < (int) _RB_MAX_TREE_DEPTH)
+            stack[stacksz++] = node2;
+        while (get_child(node2, RB_RIGHT) &&
+               stacksz < (int) _RB_MAX_TREE_DEPTH) {
             node2 = get_child(node2, RB_RIGHT);
             stack[stacksz++] = node2;
         }
@@ -555,11 +557,16 @@ bool rb_contains(rb_t *tree, rb_node_t *node)
  */
 static rb_node_t *stack_left_limb(rb_node_t *n, rb_foreach_t *f)
 {
+    if (f->top >= (int32_t) (_RB_MAX_TREE_DEPTH - 1))
+        return NULL;
+
     f->top++;
     f->stack[f->top] = n;
     f->is_left[f->top] = false;
 
     for (n = get_child(n, RB_LEFT); n; n = get_child(n, RB_LEFT)) {
+        if (f->top >= (int32_t) (_RB_MAX_TREE_DEPTH - 1))
+            break;
         f->top++;
         f->stack[f->top] = n;
         f->is_left[f->top] = true;
@@ -585,15 +592,23 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
     /* Initialization step: begin with the leftmost child of the root, setting
      * up the stack as nodes are traversed.
      */
-    if (f->top == -1)
-        return stack_left_limb(tree->root, f);
+    if (f->top == -1) {
+        rb_node_t *result = stack_left_limb(tree->root, f);
+        if (!result)
+            return NULL;
+        return result;
+    }
 
     /* If the current node has a right child, traverse to the leftmost
      * descendant of the right subtree.
      */
     rb_node_t *n = get_child(f->stack[f->top], RB_RIGHT);
-    if (n)
-        return stack_left_limb(n, f);
+    if (n) {
+        rb_node_t *result = stack_left_limb(n, f);
+        if (!result)
+            return NULL;
+        return result;
+    }
 
     /* If the current node is a left child, the next node to visit is its
      * parent. The root node is pushed with 'is_left' set to false, ensuring
