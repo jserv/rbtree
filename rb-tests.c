@@ -222,7 +222,8 @@ int main()
 
             test_tree(size);
         } while (size < MAX_NODES);
-        printf("\rTesting basic red-black tree operations... [ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+        printf("\rTesting basic red-black tree operations... [ " COLOR_GREEN
+               "OK" COLOR_RESET " ]\n");
     }
 
     /* Test removing a node with abnormal color */

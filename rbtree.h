@@ -58,6 +58,7 @@
 
 #if _RB_DISABLE_ALLOCA == 0
 #if defined(__GNUC__) || defined(__clang__)
+#undef alloca
 #define alloca __builtin_alloca
 #else
 #include <alloca.h>
