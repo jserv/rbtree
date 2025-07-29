@@ -6,6 +6,10 @@
 
 #define MAX_NODES 256
 
+/* ANSI color codes */
+#define COLOR_GREEN "\033[32m"
+#define COLOR_RESET "\033[0m"
+
 static rb_t test_rbtree;
 
 static rb_node_t nodes[MAX_NODES];
@@ -203,7 +207,8 @@ int main()
 {
     /* rbtree_api */
     {
-        printf("Testing basic red-black tree operations...\n");
+        printf("Testing basic red-black tree operations...");
+        fflush(stdout);
         int size = 1;
 
         do {
@@ -212,16 +217,17 @@ int main()
             if (size > MAX_NODES)
                 size = MAX_NODES;
 
-            printf("  Checking trees built from %d nodes...\n", size);
+            printf("\r  Checking trees built from %d nodes...", size);
+            fflush(stdout);
 
             test_tree(size);
         } while (size < MAX_NODES);
-        printf("[ OK ] Basic tree operations\n");
+        printf("\rTesting basic red-black tree operations... [ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
     }
 
     /* Test removing a node with abnormal color */
     {
-        printf("Testing edge case: removing node with abnormal color...\n");
+        printf("Testing edge case: removing node with abnormal color... ");
         rb_node_t temp = {0};
 
         /* Initialize a tree and insert it */
@@ -239,7 +245,7 @@ int main()
         /* Check if tree's max and min node are expected */
         assert(rb_get_min(&test_rbtree) == &nodes[0] && "the tree is invalid");
         assert(rb_get_max(&test_rbtree) == &nodes[7] && "the tree is invalid");
-        printf("[ OK ] Edge case handling\n");
+        printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
     }
 
     /* Cached tree tests */
@@ -304,7 +310,7 @@ int main()
             assert(rb_cached_get_min(&cached_tree) == NULL);
             assert(rb_cached_get_max(&cached_tree) == NULL);
 
-            printf("[ OK ]\n");
+            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
         }
 
         /* Test cached vs standard consistency */
@@ -348,7 +354,7 @@ int main()
             assert(std_count == cached_count);
             assert(std_count == 20);
 
-            printf("[ OK ]\n");
+            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
         }
 
         /* Test cache consistency during rebalancing */
@@ -389,10 +395,8 @@ int main()
             for (int i = 0; i < 25; i++)
                 rb_cached_remove(&cached_tree, &cached_nodes[i]);
 
-            printf("[ OK ]\n");
+            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
         }
-
-        printf("Cached tree functionality [ OK ]\n");
     }
 #endif
 
