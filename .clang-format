@@ -16,3 +16,4 @@ AccessModifierOffset: -4
 ForEachMacros:
   - RB_FOREACH
   - RB_FOREACH_CONTAINER
+  - RB_CACHED_FOREACH

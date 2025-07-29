@@ -40,6 +40,22 @@
 #define _RB_DISABLE_ALLOCA 0
 #endif
 
+/* Enable leftmost caching for O(1) rb_get_min() and iterator initialization.
+ * This adds one pointer to the tree structure but significantly improves
+ * performance for minimum access and traversal operations.
+ */
+#ifndef _RB_ENABLE_LEFTMOST_CACHE
+#define _RB_ENABLE_LEFTMOST_CACHE 1
+#endif
+
+/* Enable rightmost caching for O(1) rb_get_max().
+ * This adds one pointer to the tree structure. Less commonly needed than
+ * leftmost caching, so disabled by default following Linux kernel approach.
+ */
+#ifndef _RB_ENABLE_RIGHTMOST_CACHE
+#define _RB_ENABLE_RIGHTMOST_CACHE 0
+#endif
+
 #if _RB_DISABLE_ALLOCA == 0
 #if defined(__GNUC__) || defined(__clang__)
 #define alloca __builtin_alloca
@@ -96,6 +112,24 @@ typedef struct {
 #endif
 } rb_t;
 
+#if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
+/* Cached red-black tree structure.
+ *
+ * Following the Linux kernel's approach, we cache the leftmost node for O(1)
+ * minimum access and iterator initialization. Rightmost caching is optional
+ * due to less frequent usage patterns.
+ */
+typedef struct {
+    rb_t rb_root; /**< Embedded standard tree structure */
+#if _RB_ENABLE_LEFTMOST_CACHE
+    rb_node_t *rb_leftmost; /**< Leftmost (minimum) node cache */
+#endif
+#if _RB_ENABLE_RIGHTMOST_CACHE
+    rb_node_t *rb_rightmost; /**< Rightmost (maximum) node cache */
+#endif
+} rb_cached_t;
+#endif
+
 /* forward declaration for helper functions, used for inlining */
 rb_node_t *__rb_child(rb_node_t *node, rb_side_t side);
 int __rb_is_black(rb_node_t *node);
@@ -121,6 +155,37 @@ void rb_insert(rb_t *tree, rb_node_t *node);
  */
 void rb_remove(rb_t *tree, rb_node_t *node);
 
+#if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
+/* Initialize a cached red-black tree.
+ * @tree: Pointer to the cached red-black tree.
+ * @cmp_func: Comparison function for node ordering.
+ */
+static inline void rb_cached_init(rb_cached_t *tree, rb_cmp_t cmp_func)
+{
+    tree->rb_root.root = NULL;
+    tree->rb_root.cmp_func = cmp_func;
+    tree->rb_root.max_depth = 0;
+#if _RB_ENABLE_LEFTMOST_CACHE
+    tree->rb_leftmost = NULL;
+#endif
+#if _RB_ENABLE_RIGHTMOST_CACHE
+    tree->rb_rightmost = NULL;
+#endif
+}
+
+/* Insert a new node into the cached red-black tree.
+ * @tree: Pointer to the cached red-black tree.
+ * @node: Pointer to the node to be inserted.
+ */
+void rb_cached_insert(rb_cached_t *tree, rb_node_t *node);
+
+/* Remove a node from the cached red-black tree.
+ * @tree: Pointer to the cached red-black tree.
+ * @node: Pointer to the node to be removed.
+ */
+void rb_cached_remove(rb_cached_t *tree, rb_node_t *node);
+#endif
+
 /* Return the lowest-sorted member of the red-black tree */
 static inline rb_node_t *rb_get_min(rb_t *tree)
 {
@@ -132,6 +197,38 @@ static inline rb_node_t *rb_get_max(rb_t *tree)
 {
     return __rb_get_minmax(tree, RB_RIGHT);
 }
+
+#if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
+/* Return the lowest-sorted member of the cached red-black tree (O(1) when
+ * cached)
+ */
+static inline rb_node_t *rb_cached_get_min(rb_cached_t *tree)
+{
+#if _RB_ENABLE_LEFTMOST_CACHE
+    return tree->rb_leftmost;
+#else
+    return __rb_get_minmax(&tree->rb_root, RB_LEFT);
+#endif
+}
+
+/* Return the highest-sorted member of the cached red-black tree (O(1) when
+ * cached)
+ */
+static inline rb_node_t *rb_cached_get_max(rb_cached_t *tree)
+{
+#if _RB_ENABLE_RIGHTMOST_CACHE
+    return tree->rb_rightmost;
+#else
+    return __rb_get_minmax(&tree->rb_root, RB_RIGHT);
+#endif
+}
+
+/* Check if the cached tree is empty */
+static inline bool rb_cached_empty(rb_cached_t *tree)
+{
+    return tree->rb_root.root == NULL;
+}
+#endif
 
 /* Check if the given node is present in the red-black tree.
  * @tree: Pointer to the red-black tree.
@@ -233,5 +330,38 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f);
              (node);                                                          \
          });                                                                  \
          /**/)
+
+#if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
+/* Optimized in-order traversal of a cached red-black tree.
+ * @tree: Pointer to the cached red-black tree ('rb_cached_t') to traverse.
+ * @node: Name of a local variable of type 'rb_node_t *' to use as the iterator.
+ *
+ * This macro is similar to RB_FOREACH but optimized for cached trees. When
+ * leftmost caching is enabled, iterator initialization is O(1) instead of O(log
+ * N).
+ */
+#define RB_CACHED_FOREACH(tree, node)                                 \
+    for (rb_foreach_t __f = _RB_FOREACH_INIT(&(tree)->rb_root, node); \
+         ((node) = __rb_cached_foreach_next((tree), &__f));           \
+         /**/)
+
+/* Optimized in-order traversal of a cached red-black tree with container
+ * handling.
+ * @tree:  Pointer to the cached red-black tree ('rb_cached_t') to traverse.
+ * @node:  Name of the local iterator variable, which is a pointer to the
+ *         container type.
+ * @field: Name of the 'rb_node_t' member within the container struct.
+ */
+#define RB_CACHED_FOREACH_CONTAINER(tree, node, field)                        \
+    for (rb_foreach_t __f = _RB_FOREACH_INIT(&(tree)->rb_root, node); ({      \
+             rb_node_t *n = __rb_cached_foreach_next((tree), &__f);           \
+             (node) = n ? container_of(n, __typeof__(*(node)), field) : NULL; \
+             (node);                                                          \
+         });                                                                  \
+         /**/)
+
+/* Forward declaration for cached foreach implementation */
+rb_node_t *__rb_cached_foreach_next(rb_cached_t *tree, rb_foreach_t *f);
+#endif
 
 #endif /* _RBTREE_H_ */

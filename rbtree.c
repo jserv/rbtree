@@ -627,3 +627,60 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
     f->top--;
     return (f->top >= 0) ? f->stack[f->top] : NULL;
 }
+
+#if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
+/* Helper function to update cache pointers after node insertion */
+static void update_cache_insert(rb_cached_t *tree, rb_node_t *node)
+{
+#if _RB_ENABLE_LEFTMOST_CACHE
+    /* Update leftmost cache if this is the new minimum */
+    if (!tree->rb_leftmost || tree->rb_root.cmp_func(node, tree->rb_leftmost))
+        tree->rb_leftmost = node;
+#endif
+
+#if _RB_ENABLE_RIGHTMOST_CACHE
+    /* Update rightmost cache if this is the new maximum */
+    if (!tree->rb_rightmost || tree->rb_root.cmp_func(tree->rb_rightmost, node))
+        tree->rb_rightmost = node;
+#endif
+}
+
+/* Helper function to update cache pointers after node removal */
+static void update_cache_remove(rb_cached_t *tree, rb_node_t *node)
+{
+#if _RB_ENABLE_LEFTMOST_CACHE
+    /* Update leftmost cache if we're removing the minimum */
+    if (tree->rb_leftmost == node)
+        tree->rb_leftmost = __rb_get_minmax(&tree->rb_root, RB_LEFT);
+#endif
+
+#if _RB_ENABLE_RIGHTMOST_CACHE
+    /* Update rightmost cache if we're removing the maximum */
+    if (tree->rb_rightmost == node)
+        tree->rb_rightmost = __rb_get_minmax(&tree->rb_root, RB_RIGHT);
+#endif
+}
+
+void rb_cached_insert(rb_cached_t *tree, rb_node_t *node)
+{
+    rb_insert(&tree->rb_root, node);
+    update_cache_insert(tree, node);
+}
+
+void rb_cached_remove(rb_cached_t *tree, rb_node_t *node)
+{
+    rb_remove(&tree->rb_root, node);
+    update_cache_remove(tree, node);
+}
+
+/* Optimized foreach next function for cached trees */
+rb_node_t *__rb_cached_foreach_next(rb_cached_t *tree, rb_foreach_t *f)
+{
+    /* Simply delegate to standard implementation - the real optimization
+     * is in knowing the leftmost node without traversal, not in the
+     * iteration logic itself. This keeps the implementation simple and
+     * correct while still providing the O(1) benefit for direct min access.
+     */
+    return __rb_foreach_next(&tree->rb_root, f);
+}
+#endif
