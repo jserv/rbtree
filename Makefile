@@ -20,7 +20,7 @@ all: $(BIN)
 
 check: $(BIN)
 	./rb-tests
-	./rb-perf 50
+	./rb-perf 1000000
 
 .PHONY: clean
 clean:
