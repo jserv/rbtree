@@ -683,7 +683,7 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
 
         while (n) {
 #if _RB_ENABLE_SAFETY_CHECKS
-            if (f->top >= (int32_t) _RB_MAX_TREE_DEPTH - 2) {
+            if (f->top >= (int32_t) _RB_EFFECTIVE_DEPTH_LIMIT - 2) {
                 f->top = RB_ITER_DONE;
                 return NULL;
             }
@@ -715,7 +715,7 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
                 rb_node_t *current = right;
                 while (current) {
 #if _RB_ENABLE_SAFETY_CHECKS
-                    if (f->top >= (int32_t) _RB_MAX_TREE_DEPTH - 2) {
+                    if (f->top >= (int32_t) _RB_EFFECTIVE_DEPTH_LIMIT - 2) {
                         f->top = RB_ITER_DONE;
                         return NULL;
                     }

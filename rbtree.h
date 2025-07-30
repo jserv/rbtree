@@ -119,6 +119,18 @@ typedef struct __rb_node {
 #define _RB_MAX_TREE_DEPTH \
     (2 * (_RB_PTR_SIZE_BITS(int *) - _RB_PTR_TAG_BITS(int *) - 1) + 1)
 
+/* Optimize buffer size based on expected tree depth */
+#ifndef _RB_COMMON_TREE_DEPTH
+#define _RB_COMMON_TREE_DEPTH 32 /* Supports 2^31 nodes efficiently */
+#endif
+
+/* Use appropriate depth limit based on alloca setting */
+#if _RB_DISABLE_ALLOCA != 0
+#define _RB_EFFECTIVE_DEPTH_LIMIT _RB_COMMON_TREE_DEPTH
+#else
+#define _RB_EFFECTIVE_DEPTH_LIMIT _RB_MAX_TREE_DEPTH
+#endif
+
 /* Red-black tree comparison predicate.
  *
  * Compares two nodes and returns true if node A is strictly less than node B,
@@ -140,11 +152,11 @@ typedef struct {
     /* Single buffer for iterator state: node ptr + packed direction flags */
     union {
         struct {
-            rb_node_t *iter_stack[_RB_MAX_TREE_DEPTH];
-            uint8_t iter_flags[(_RB_MAX_TREE_DEPTH + 7) / 8];
+            rb_node_t *iter_stack[_RB_COMMON_TREE_DEPTH];
+            uint8_t iter_flags[(_RB_COMMON_TREE_DEPTH + 7) / 8];
         };
-        uint8_t iter_buffer[_RB_MAX_TREE_DEPTH * sizeof(rb_node_t *) +
-                            ((_RB_MAX_TREE_DEPTH + 7) / 8)];
+        uint8_t iter_buffer[_RB_COMMON_TREE_DEPTH * sizeof(rb_node_t *) +
+                            ((_RB_COMMON_TREE_DEPTH + 7) / 8)];
     };
 #endif
 } rb_t;
