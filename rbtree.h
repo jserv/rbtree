@@ -149,14 +149,10 @@ typedef struct {
     rb_cmp_t cmp_func; /**< Comparison function for nodes */
 #if _RB_DISABLE_ALLOCA != 0
     uint8_t max_depth; /**< Maximum depth (only needed for fixed stack) */
-    /* Single buffer for iterator state: node ptr + packed direction flags */
+    /* Single buffer for iterator state: node ptr with flags packed in LSB */
     union {
-        struct {
-            rb_node_t *iter_stack[_RB_COMMON_TREE_DEPTH];
-            uint8_t iter_flags[(_RB_COMMON_TREE_DEPTH + 7) / 8];
-        };
-        uint8_t iter_buffer[_RB_COMMON_TREE_DEPTH * sizeof(rb_node_t *) +
-                            ((_RB_COMMON_TREE_DEPTH + 7) / 8)];
+        rb_node_t *iter_stack[_RB_COMMON_TREE_DEPTH];
+        uint8_t iter_buffer[_RB_COMMON_TREE_DEPTH * sizeof(rb_node_t *)];
     };
 #endif
 } rb_t;
@@ -383,41 +379,43 @@ bool rb_cached_contains(rb_cached_t *tree, rb_node_t *node);
  * layout to minimize memory allocation overhead and improve cache locality.
  *
  * Memory Layout:
- * - Node pointers stored at buffer start
- * - Direction flags packed as bit array at buffer end
+ * - Node pointers with direction flags packed in LSB
  * - Single allocation reduces malloc overhead
  * - Improved cache locality during traversal
+ * - 16-byte memory saving from flag packing optimization
  *
  * Fields:
- * @buffer: Single allocation containing both node stack and direction flags
+ * @buffer: Node stack with direction flags packed in pointer LSB
  * @top:    Current stack position (RB_ITER_UNINIT=uninitialized,
  *          RB_ITER_DONE=done, >=0=active)
  */
 typedef struct {
-    void *buffer; /**< Single allocation for both stack and direction flags */
+    void *buffer; /**< Node stack with direction flags packed in LSB */
     int32_t top;  /**< Current position in the stack (RB_ITER_UNINIT = uninit,
                      RB_ITER_DONE = done) */
 } rb_foreach_t;
 
 /* Helper macros to access the optimized buffer layout */
 #define _RB_FOREACH_STACK(f) ((rb_node_t **) (f)->buffer)
-#define _RB_FOREACH_FLAGS(f) \
-    ((uint8_t *) ((rb_node_t **) (f)->buffer + _RB_MAX_TREE_DEPTH))
-#define _RB_FOREACH_GET_FLAG(f, idx) \
-    ((_RB_FOREACH_FLAGS(f)[(idx) >> 3] >> ((idx) & 7)) & 1)
-#define _RB_FOREACH_SET_FLAG(f, idx, val)             \
-    do {                                              \
-        uint8_t *flags = _RB_FOREACH_FLAGS(f);        \
-        if (val)                                      \
-            flags[(idx) >> 3] |= (1 << ((idx) & 7));  \
-        else                                          \
-            flags[(idx) >> 3] &= ~(1 << ((idx) & 7)); \
+
+/* Pack direction flags into LSB of stack pointers (saves 16 bytes) */
+#define _RB_FOREACH_SET_DIRECTION(f, idx, went_left)                         \
+    do {                                                                     \
+        rb_node_t **stack = _RB_FOREACH_STACK(f);                            \
+        uintptr_t ptr = (uintptr_t) stack[idx];                              \
+        stack[idx] = (rb_node_t *) ((ptr & ~1UL) | (went_left ? 1UL : 0UL)); \
     } while (0)
 
+#define _RB_FOREACH_GET_DIRECTION(f, idx) \
+    (((uintptr_t) _RB_FOREACH_STACK(f)[idx]) & 1UL)
+
+#define _RB_FOREACH_GET_NODE(f, idx) \
+    ((rb_node_t *) (((uintptr_t) _RB_FOREACH_STACK(f)[idx]) & ~1UL))
+
+
 #if _RB_DISABLE_ALLOCA == 0
-/* Calculate buffer size: node pointers + bit array for flags */
-#define _RB_FOREACH_BUFFER_SIZE \
-    (_RB_MAX_TREE_DEPTH * sizeof(rb_node_t *) + ((_RB_MAX_TREE_DEPTH + 7) / 8))
+/* Calculate buffer size: only node pointers (flags packed in LSB) */
+#define _RB_FOREACH_BUFFER_SIZE (_RB_MAX_TREE_DEPTH * sizeof(rb_node_t *))
 
 #define _RB_FOREACH_INIT(tree, node)               \
     {                                              \
