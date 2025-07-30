@@ -525,7 +525,7 @@ int main()
 #if _RB_ENABLE_BATCH_OPS
     /* Test batch operations */
     {
-        printf("Batch operations test...");
+        printf("Testing batch operations... ");
 
         /* Test basic batch operations */
         rb_batch_t batch;
