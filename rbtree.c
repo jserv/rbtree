@@ -439,11 +439,13 @@ static void fix_missing_black(rb_node_t **stack,
             sib = get_child(parent, (n_side == RB_LEFT) ? RB_RIGHT : RB_LEFT);
         }
 
+        /* Cache sibling's children to avoid repeated get_child() calls */
+        c0 = get_child(sib, RB_LEFT);
+        c1 = get_child(sib, RB_RIGHT);
+
         /* Situations where the sibling has only black children can be resolved
          * straightforwardly.
          */
-        c0 = get_child(sib, RB_LEFT);
-        c1 = get_child(sib, RB_RIGHT);
         if ((!c0 || is_black(c0)) && (!c1 || is_black(c1))) {
             if (n == null_node)
                 set_child(parent, n_side, NULL);
@@ -464,11 +466,11 @@ static void fix_missing_black(rb_node_t **stack,
 
         /* The sibling has at least one red child. Adjust the tree so that the
          * far/outer child (i.e., on the opposite side of N) is guaranteed to
-         * be red.
+         * be red. Use cached children instead of repeated get_child() calls.
          */
-        outer = get_child(sib, (n_side == RB_LEFT) ? RB_RIGHT : RB_LEFT);
+        outer = (n_side == RB_LEFT) ? c1 : c0;
         if (!(outer && is_red(outer))) {
-            inner = get_child(sib, n_side);
+            inner = (n_side == RB_LEFT) ? c0 : c1;
 
             /* Standard double rotation: rotate sibling with its inner child
              * first */
@@ -479,8 +481,10 @@ static void fix_missing_black(rb_node_t **stack,
             rb_side_t inner_side = n_side;
             rb_side_t outer_side = (n_side == RB_LEFT) ? RB_RIGHT : RB_LEFT;
 
-            /* Update sibling's child relationships for first rotation */
+            /* Cache child pointers for reuse */
             rb_node_t *inner_child = get_child(inner, outer_side);
+
+            /* Update sibling's child relationships for first rotation */
             set_child(sib, inner_side, inner_child);
             set_child(inner, outer_side, sib);
 
