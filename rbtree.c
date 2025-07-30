@@ -793,17 +793,70 @@ void rb_cached_remove(rb_cached_t *tree, rb_node_t *node)
     update_cache_remove(tree, node);
 }
 
-/* Get the next node in cached tree traversal.
- * @tree: Pointer to the cached red-black tree structure
- * @f:    Pointer to the traversal state structure
+/* Build path from root to cached leftmost node.
+ * Uses the cached leftmost pointer to avoid redundant tree traversal.
+ */
+static int build_path_to_leftmost(rb_cached_t *tree, rb_node_t **stack)
+{
+#if _RB_ENABLE_LEFTMOST_CACHE
+    if (!tree->rb_leftmost)
+        return 0;
+
+    int depth = 0;
+    rb_node_t *current = tree->rb_root.root;
+
+    /* Build path from root down to leftmost node */
+    while (current && current != tree->rb_leftmost) {
+#if _RB_ENABLE_SAFETY_CHECKS
+        if (depth >= (int32_t) _RB_EFFECTIVE_DEPTH_LIMIT - 2)
+            return 0;
+#endif
+        stack[depth++] = current;
+        current = get_child(current, RB_LEFT);
+    }
+
+    if (current == tree->rb_leftmost)
+        stack[depth++] = tree->rb_leftmost;
+
+    return depth;
+
+#else
+    return 0;
+#endif
+}
+
+/* Get the next node in cached tree traversal with optimized initialization.
+ * When leftmost caching is enabled, uses cached leftmost node to build the
+ * initial iterator path more efficiently than traversing from root.
  */
 rb_node_t *__rb_cached_foreach_next(rb_cached_t *tree, rb_foreach_t *f)
 {
-    /* Simply delegate to standard implementation - the real optimization
-     * is in knowing the leftmost node without traversal, not in the
-     * iteration logic itself. This keeps the implementation simple and
-     * correct while still providing the O(1) benefit for direct min access.
-     */
+    if (!tree->rb_root.root)
+        return NULL;
+
+    /* Check if traversal is complete */
+    if (f->top == RB_ITER_DONE)
+        return NULL;
+
+#if _RB_ENABLE_LEFTMOST_CACHE
+    /* Optimized initialization using cached leftmost node */
+    if (f->top == RB_ITER_UNINIT && tree->rb_leftmost) {
+        rb_node_t **stack = _RB_FOREACH_STACK(f);
+        int depth = build_path_to_leftmost(tree, stack);
+
+        if (depth > 0) {
+            /* Set up the stack with path to leftmost */
+            for (int i = 0; i < depth; i++)
+                _RB_FOREACH_SET_DIRECTION(f, i, true);
+            f->top = depth;
+
+            /* Continue with standard iteration logic from here */
+            return __rb_foreach_next(&tree->rb_root, f);
+        }
+    }
+#endif
+
+    /* Fall back to standard implementation */
     return __rb_foreach_next(&tree->rb_root, f);
 }
 
