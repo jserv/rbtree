@@ -59,7 +59,9 @@ static void bench_insertion(int count)
     memset(&tree, 0, sizeof(tree));
     tree.cmp_func = perf_node_lessthan;
     tree.root = NULL;
+#if _RB_DISABLE_ALLOCA != 0
     tree.max_depth = 0;
+#endif
 
     /* Generate unique sequential keys */
     for (int i = 0; i < count; i++) {
@@ -108,7 +110,9 @@ static void bench_search(int count)
     memset(&tree, 0, sizeof(tree));
     tree.cmp_func = perf_node_lessthan;
     tree.root = NULL;
+#if _RB_DISABLE_ALLOCA != 0
     tree.max_depth = 0;
+#endif
 
     /* Generate sequential keys and initialize nodes */
     for (int i = 0; i < count; i++) {
@@ -165,7 +169,9 @@ static void bench_deletion(int count)
     memset(&tree, 0, sizeof(tree));
     tree.cmp_func = perf_node_lessthan;
     tree.root = NULL;
+#if _RB_DISABLE_ALLOCA != 0
     tree.max_depth = 0;
+#endif
 
     /* Generate sequential keys */
     for (int i = 0; i < count; i++) {
@@ -238,7 +244,9 @@ static void bench_mixed_operations(int count)
     memset(&tree, 0, sizeof(tree));
     tree.cmp_func = perf_node_lessthan;
     tree.root = NULL;
+#if _RB_DISABLE_ALLOCA != 0
     tree.max_depth = 0;
+#endif
 
     /* Generate unique sequential keys */
     for (int i = 0; i < count; i++) {

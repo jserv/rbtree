@@ -330,8 +330,13 @@ int main()
         {
             printf("Testing cached vs standard tree consistency... ");
 
-            rb_t standard_tree = {
-                .root = NULL, .cmp_func = node_lessthan, .max_depth = 0};
+            rb_t standard_tree = {.root = NULL,
+                                  .cmp_func = node_lessthan
+#if _RB_DISABLE_ALLOCA != 0
+                                  ,
+                                  .max_depth = 0
+#endif
+            };
             rb_cached_init(&cached_tree, node_lessthan);
 
             /* Insert same nodes in both trees */

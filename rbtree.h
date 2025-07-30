@@ -147,8 +147,8 @@ typedef bool (*rb_cmp_t)(const rb_node_t *a, const rb_node_t *b);
 typedef struct {
     rb_node_t *root;   /**< Root node of the tree */
     rb_cmp_t cmp_func; /**< Comparison function for nodes */
-    uint8_t max_depth; /**< Maximum depth (theoretical max: 121 for 64-bit) */
 #if _RB_DISABLE_ALLOCA != 0
+    uint8_t max_depth; /**< Maximum depth (only needed for fixed stack) */
     /* Single buffer for iterator state: node ptr + packed direction flags */
     union {
         struct {
@@ -234,7 +234,9 @@ static inline void rb_cached_init(rb_cached_t *tree, rb_cmp_t cmp_func)
 {
     tree->rb_root.root = NULL;
     tree->rb_root.cmp_func = cmp_func;
+#if _RB_DISABLE_ALLOCA != 0
     tree->rb_root.max_depth = 0;
+#endif
 #if _RB_ENABLE_LEFTMOST_CACHE
     tree->rb_leftmost = NULL;
 #endif

@@ -351,7 +351,9 @@ void rb_insert(rb_t *tree, rb_node_t *node)
     /* If the tree is empty, set the new node as the root and color it black. */
     if (!tree->root) {
         tree->root = node;
+#if _RB_DISABLE_ALLOCA != 0
         tree->max_depth = 1;
+#endif
         set_black(node);
         return;
     }
@@ -381,8 +383,10 @@ void rb_insert(rb_t *tree, rb_node_t *node)
     fix_extra_red(stack, stacksz);
 
     /* Update the maximum depth of the tree if necessary. */
+#if _RB_DISABLE_ALLOCA != 0
     if (stacksz > tree->max_depth)
         tree->max_depth = (uint8_t) stacksz;
+#endif
 
     /* Ensure the root is correctly updated after potential rotations. */
     tree->root = stack[0];
@@ -601,7 +605,9 @@ void rb_remove(rb_t *tree, rb_node_t *node)
         if (child) {
             set_black(child);
         } else {
+#if _RB_DISABLE_ALLOCA != 0
             tree->max_depth = 0;
+#endif
         }
         return;
     }
