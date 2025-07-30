@@ -108,8 +108,15 @@ typedef struct {
     rb_cmp_t cmp_func; /**< Comparison function for nodes */
     int max_depth;
 #if _RB_DISABLE_ALLOCA != 0
-    rb_node_t *iter_stack[_RB_MAX_TREE_DEPTH];
-    bool iter_left[_RB_MAX_TREE_DEPTH];
+    /* Single buffer for iterator state: node ptr + packed direction flags */
+    union {
+        struct {
+            rb_node_t *iter_stack[_RB_MAX_TREE_DEPTH];
+            uint8_t iter_flags[(_RB_MAX_TREE_DEPTH + 7) / 8];
+        };
+        uint8_t iter_buffer[_RB_MAX_TREE_DEPTH * sizeof(rb_node_t *) +
+                            ((_RB_MAX_TREE_DEPTH + 7) / 8)];
+    };
 #endif
 } rb_t;
 
@@ -248,29 +255,49 @@ bool rb_contains(rb_t *tree, rb_node_t *node);
 /* Helper structure for non-recursive red-black tree traversal.
  *
  * This structure is used by the RB_FOREACH and RB_FOREACH_CONTAINER macros
- * to perform an in-order traversal of a red-black tree without recursion. It
- * maintains a dynamic stack of nodes and a corresponding array to indicate
- * whether each node is a left child of its parent.
+ * to perform an in-order traversal of a red-black tree without recursion.
+ *
+ * Memory layout optimization:
+ * - Uses a single buffer allocation instead of two separate arrays
+ * - Node pointers are stored at the beginning of the buffer
+ * - Direction flags are packed into a bit array at the end
+ * - This improves cache locality and reduces memory overhead
  */
 typedef struct {
-    rb_node_t **stack; /**< Hold the nodes encountered during traversal */
-    bool *is_left;     /**< Track the relationship of each node to its parent */
-    int32_t top;       /**< Keeps track of the current position in the stack */
+    void *buffer; /**< Single allocation for both stack and direction flags */
+    int32_t top;  /**< Current position in the stack (-1 = uninit, -2 = done) */
 } rb_foreach_t;
 
+/* Helper macros to access the optimized buffer layout */
+#define _RB_FOREACH_STACK(f) ((rb_node_t **) (f)->buffer)
+#define _RB_FOREACH_FLAGS(f) \
+    ((uint8_t *) ((rb_node_t **) (f)->buffer + _RB_MAX_TREE_DEPTH))
+#define _RB_FOREACH_GET_FLAG(f, idx) \
+    ((_RB_FOREACH_FLAGS(f)[(idx) >> 3] >> ((idx) & 7)) & 1)
+#define _RB_FOREACH_SET_FLAG(f, idx, val)             \
+    do {                                              \
+        uint8_t *flags = _RB_FOREACH_FLAGS(f);        \
+        if (val)                                      \
+            flags[(idx) >> 3] |= (1 << ((idx) & 7));  \
+        else                                          \
+            flags[(idx) >> 3] &= ~(1 << ((idx) & 7)); \
+    } while (0)
+
 #if _RB_DISABLE_ALLOCA == 0
-#define _RB_FOREACH_INIT(tree, node)                               \
-    {                                                              \
-        .stack = alloca(_RB_MAX_TREE_DEPTH * sizeof(rb_node_t *)), \
-        .is_left = alloca(_RB_MAX_TREE_DEPTH * sizeof(bool)),      \
-        .top = -1,                                                 \
+/* Calculate buffer size: node pointers + bit array for flags */
+#define _RB_FOREACH_BUFFER_SIZE \
+    (_RB_MAX_TREE_DEPTH * sizeof(rb_node_t *) + ((_RB_MAX_TREE_DEPTH + 7) / 8))
+
+#define _RB_FOREACH_INIT(tree, node)               \
+    {                                              \
+        .buffer = alloca(_RB_FOREACH_BUFFER_SIZE), \
+        .top = -1,                                 \
     }
 #else
-#define _RB_FOREACH_INIT(tree, node)      \
-    {                                     \
-        .stack = &(tree)->iter_stack[0],  \
-        .is_left = &(tree)->iter_left[0], \
-        .top = -1,                        \
+#define _RB_FOREACH_INIT(tree, node)   \
+    {                                  \
+        .buffer = (tree)->iter_buffer, \
+        .top = -1,                     \
     }
 #endif
 

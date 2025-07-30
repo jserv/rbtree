@@ -598,6 +598,9 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
     if (f->top == -2)
         return NULL;
 
+    /* Get stack pointer from buffer */
+    rb_node_t **stack = _RB_FOREACH_STACK(f);
+
     /* Initialize: push root and go down left as far as possible */
     if (f->top == -1) {
         rb_node_t *n = tree->root;
@@ -609,8 +612,8 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
                 return NULL;
             }
 
-            f->stack[f->top] = n;
-            f->is_left[f->top] = true; /* We went left to get here */
+            stack[f->top] = n;
+            _RB_FOREACH_SET_FLAG(f, f->top, 1); /* We went left to get here */
             f->top++;
             n = get_child(n, RB_LEFT);
         }
@@ -619,13 +622,14 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
     /* Main traversal loop */
     while (f->top > 0) {
         f->top--;
-        rb_node_t *n = f->stack[f->top];
-        bool went_left = f->is_left[f->top];
+        rb_node_t *n = stack[f->top];
+        bool went_left = _RB_FOREACH_GET_FLAG(f, f->top);
 
         if (went_left) {
             /* Coming up from left subtree, visit this node */
-            f->is_left[f->top] = false; /* Mark that we've visited this node */
-            f->top++;                   /* Put it back on stack */
+            _RB_FOREACH_SET_FLAG(f, f->top,
+                                 0); /* Mark that we've visited this node */
+            f->top++;                /* Put it back on stack */
 
             /* Go down right subtree if it exists */
             rb_node_t *right = get_child(n, RB_RIGHT);
@@ -637,8 +641,8 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
                         return NULL;
                     }
 
-                    f->stack[f->top] = current;
-                    f->is_left[f->top] = true;
+                    stack[f->top] = current;
+                    _RB_FOREACH_SET_FLAG(f, f->top, 1);
                     f->top++;
                     current = get_child(current, RB_LEFT);
                 }
