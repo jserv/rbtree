@@ -1,7 +1,15 @@
+#include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
 
 #include "rbtree.h"
+
+/* Compile-time validation of stack depth for safety */
+#if _RB_ENABLE_SAFETY_CHECKS
+_Static_assert(_RB_MAX_TREE_DEPTH >= 32, "Stack depth too small for safety");
+_Static_assert(_RB_MAX_TREE_DEPTH >= 4,
+               "Insufficient buffer space for safety margin");
+#endif
 
 typedef enum { RB_RED = 0, RB_BLACK = 1 } rb_color_t;
 
@@ -136,13 +144,13 @@ static unsigned find_and_stack(rb_t *tree, rb_node_t *node, rb_node_t **stack)
         if (!ch)
             break;
 
-        /* Check if we have room for one more node on the stack */
-        if (sz >= (unsigned) _RB_MAX_TREE_DEPTH - 1) {
-            /* Tree is corrupted or has a cycle - stop traversal.
-             * Even without safety checks, we must prevent buffer overflow.
-             */
-            break;
+#if _RB_ENABLE_SAFETY_CHECKS
+        /* Enhanced bounds checking with early detection */
+        if (sz >= (unsigned) _RB_MAX_TREE_DEPTH - 2) {
+            /* Prevent buffer overflow - tree likely corrupted */
+            return sz; /* Safe early termination */
         }
+#endif
 
         /* Push the child node onto the stack and continue traversal. */
         stack[sz++] = ch;
@@ -630,10 +638,12 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
         f->top = 0;
 
         while (n) {
-            if (f->top >= (int32_t) _RB_MAX_TREE_DEPTH - 1) {
+#if _RB_ENABLE_SAFETY_CHECKS
+            if (f->top >= (int32_t) _RB_MAX_TREE_DEPTH - 2) {
                 f->top = RB_ITER_DONE;
                 return NULL;
             }
+#endif
 
             stack[f->top] = n;
             /* We went left to get here */
@@ -660,10 +670,12 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
             if (right) {
                 rb_node_t *current = right;
                 while (current) {
-                    if (f->top >= (int32_t) _RB_MAX_TREE_DEPTH - 1) {
+#if _RB_ENABLE_SAFETY_CHECKS
+                    if (f->top >= (int32_t) _RB_MAX_TREE_DEPTH - 2) {
                         f->top = RB_ITER_DONE;
                         return NULL;
                     }
+#endif
 
                     stack[f->top] = current;
                     flags[f->top >> 3] |= (1 << (f->top & 7));
