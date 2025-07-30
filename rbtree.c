@@ -621,6 +621,8 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
 
     /* Get stack pointer from buffer */
     rb_node_t **stack = _RB_FOREACH_STACK(f);
+    /* Precompute flag array offset to reduce memory indirection */
+    uint8_t *flags = _RB_FOREACH_FLAGS(f);
 
     /* Initialize: push root and go down left as far as possible */
     if (f->top == -1) {
@@ -634,7 +636,8 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
             }
 
             stack[f->top] = n;
-            _RB_FOREACH_SET_FLAG(f, f->top, 1); /* We went left to get here */
+            /* We went left to get here */
+            flags[f->top >> 3] |= (1 << (f->top & 7));
             f->top++;
             n = get_child(n, RB_LEFT);
         }
@@ -644,13 +647,13 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
     while (f->top > 0) {
         f->top--;
         rb_node_t *n = stack[f->top];
-        bool went_left = _RB_FOREACH_GET_FLAG(f, f->top);
+        bool went_left = (flags[f->top >> 3] >> (f->top & 7)) & 1;
 
         if (went_left) {
             /* Coming up from left subtree, visit this node */
-            _RB_FOREACH_SET_FLAG(f, f->top,
-                                 0); /* Mark that we've visited this node */
-            f->top++;                /* Put it back on stack */
+            /* Mark that we have visited this node */
+            flags[f->top >> 3] &= ~(1 << (f->top & 7));
+            f->top++; /* Put it back on stack */
 
             /* Go down right subtree if it exists */
             rb_node_t *right = get_child(n, RB_RIGHT);
@@ -663,7 +666,7 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
                     }
 
                     stack[f->top] = current;
-                    _RB_FOREACH_SET_FLAG(f, f->top, 1);
+                    flags[f->top >> 3] |= (1 << (f->top & 7));
                     f->top++;
                     current = get_child(current, RB_LEFT);
                 }
