@@ -1,8 +1,17 @@
 # rbtree
 
-This package provides an implementation of a balanced tree, with search and
-deletion operations guaranteed to run in $O(\log_2(N))$ time for a tree
-containing $N$ elements. It uses a standard red-black tree structure.
+This package provides a memory-optimized red-black tree implementation with
+search and deletion operations guaranteed to run in $O(\log_2(N))$ time for
+a tree containing $N$ elements. Features include intrusive node design,
+pointer alignment optimization, optional caching for O(1) min/max access,
+and configurable build-time options for performance tuning.
+
+## Build-time Configuration
+
+The implementation supports several build-time options:
+- `_RB_ENABLE_LEFTMOST_CACHE` (default: 1): Enable O(1) minimum node access
+- `_RB_ENABLE_RIGHTMOST_CACHE` (default: 0): Enable O(1) maximum node access
+- `_RB_ENABLE_SAFETY_CHECKS` (default: 1): Enable bounds checking (<5% overhead)
 
 ## Data Structure
 
@@ -33,14 +42,13 @@ complexity of $O(\log(N))$ based on the size of the tree.
 
 ### Operations
 
-One method is provided for iterating through all elements of an `rb_t` using
-the `RB_FOREACH` iterator. This iterator allows for a more natural iteration
-over the tree with a nested code block instead of a callback function. It is
-non-recursive but requires $O(\log(N))$ stack space by default. This
-behavior can be configured to use a fixed, maximally sized buffer to avoid
-dynamic allocation. Additionally, there is an `RB_FOREACH_CONTAINER` variant
-that iterates using a pointer to the container field rather than the raw node
-pointer.
+Tree iteration is provided through the `RB_FOREACH` iterator, which allows
+natural iteration with nested code blocks instead of callbacks. The iterator
+is non-recursive and uses optimized memory allocation - either dynamic stack
+allocation or a fixed buffer to avoid runtime overhead. Recent improvements
+include reduced memory usage and enhanced bounds checking. An
+`RB_FOREACH_CONTAINER` variant iterates using container pointers rather than
+raw node pointers.
 
 ### Implementation Details
 
@@ -65,41 +73,40 @@ locality and eliminates additional memory allocations, but it also requires more
 complex logic to handle edge cases, such as when one of the nodes is the root or
 when the nodes have a parent-child relationship.
 
-The `rb_node_t` structure for this package's `rb_t` only contains two pointers,
-representing the "left" and "right" children of a node within the binary tree.
-However, during tree rebalancing after a modification, it is often necessary to
-traverse "upwards" from a node. In many red-black tree implementations, this is
-accomplished using an additional "parent" pointer. This package avoids the need
-for a third pointer by constructing a "stack" of node pointers locally as it
-traverses downward through the tree and updating it as needed during
-modifications. This way, the `rb_t` can be implemented without any additional
-runtime storage overhead beyond that of a doubly-linked list.
+The `rb_node_t` structure contains only two pointers for left and right
+children. Node colors are stored in the least significant bit of the left
+pointer, leveraging pointer alignment guarantees. Unlike implementations with
+parent pointers, this package uses a traversal stack for upward navigation
+during rebalancing. Recent optimizations include magic number extraction,
+improved bounds checking, and pointer alignment verification to ensure the
+color bit storage remains valid. Memory usage has been further reduced through
+iterator buffer optimization.
 
 ```
-+-------------+     node 2 (black)
++-------------+     node 2 (black, color in left ptr LSB)
 | rb_t        |    +------------------+
 | * root ----------|    rb_node_t     |
-| * max_depth |    | * left | * right |
+| * cmp_func  |    | * left¹| * right |  ¹ LSB stores color bit
 +-------------+    +----/---------\---+
                        /           \
        node 1 (black) /             \ node 4 (red)
       +------------------+       +------------------+
       |    rb_node_t     |       |    rb_node_t     |
-      | * left | * right |       | * left | * right |
+      | * left¹| * right |       | * left¹| * right |
       +----/---------\---+       +----/---------\---+
           /           \              /           \
        NULL           NULL          /             \
                         node 3 (black)        node 5 (black)
                        +------------------+  +------------------+
                        |    rb_node_t     |  |    rb_node_t     |
-                       | * left | * right |  | * left | * right |
+                       | * left¹| * right |  | * left¹| * right |
                        +----/---------\---+  +----/---------\---+
                            /           \         /           \
                         NULL           NULL    NULL           \
                                                      node 6 (red)
                                                    +------------------+
                                                    |    rb_node_t     |
-                                                   | * left | * right |
+                                                   | * left¹| * right |
                                                    +----/---------\---+
                                                        /           \
                                                     NULL           NULL
