@@ -113,7 +113,7 @@ typedef bool (*rb_cmp_t)(const rb_node_t *a, const rb_node_t *b);
 typedef struct {
     rb_node_t *root;   /**< Root node of the tree */
     rb_cmp_t cmp_func; /**< Comparison function for nodes */
-    int max_depth;
+    uint8_t max_depth; /**< Maximum depth (theoretical max: 121 for 64-bit) */
 #if _RB_DISABLE_ALLOCA != 0
     /* Single buffer for iterator state: node ptr + packed direction flags */
     union {

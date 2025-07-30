@@ -325,8 +325,8 @@ void rb_insert(rb_t *tree, rb_node_t *node)
     fix_extra_red(stack, stacksz);
 
     /* Update the maximum depth of the tree if necessary. */
-    if (stacksz > (unsigned) tree->max_depth)
-        tree->max_depth = (int) stacksz;
+    if (stacksz > tree->max_depth)
+        tree->max_depth = (uint8_t) stacksz;
 
     /* Ensure the root is correctly updated after potential rotations. */
     tree->root = stack[0];
