@@ -5,11 +5,9 @@
 
 typedef enum { RB_RED = 0, RB_BLACK = 1 } rb_color_t;
 
-/* The implementation of red-black trees contains redundancy, as many scenarios
- * have a corresponding mirrored case that is solved in the same way, except
- * with left and right children swapped. This inherent symmetry can be leveraged
- * to reduce the code size for insertion and deletion by half, using the
- * relative term "sibling" instead of the absolute terms "left" and "right."
+/* The implementation of red-black trees reduces the code size for insertion and
+ * deletion by half, using the relative term "sibling" instead of the absolute
+ * terms "left" and "right."
  *
  * To fully exploit this symmetry, it is crucial that the sibling node can be
  * retrieved efficiently. This can be achieved by storing the children in a
@@ -17,13 +15,16 @@ typedef enum { RB_RED = 0, RB_BLACK = 1 } rb_color_t;
  * array-based approach offers an unexpected advantage: efficient access to the
  * sibling node. In this design, the index of a child node can be represented by
  * 0 (left) or 1 (right), and its sibling is easily obtained using logical
- * negation (`!i`), avoiding the need for explicit comparisons to determine
+ * negation ('!i'), avoiding the need for explicit comparisons to determine
  * which child is in hand before selecting the opposite one.
  */
 
 /* Retrieve the left or right child of a given node.
- * @n:    Pointer to the current node.
- * @side: Direction to traverse.
+ * @n:    Pointer to the current node
+ * @side: Direction to traverse (RB_LEFT or RB_RIGHT)
+ *
+ * For right children, returns the pointer directly. For left children,
+ * masks out the color bit (LSB) to retrieve the actual pointer value.
  */
 static inline rb_node_t *get_child(rb_node_t *n, rb_side_t side)
 {
@@ -43,10 +44,14 @@ static inline rb_node_t *get_child(rb_node_t *n, rb_side_t side)
     return (rb_node_t *) l;
 }
 
-/* Set the left or right child of a given node.
- * @n:    Pointer to the current node.
- * @side: Direction to set.
- * @val:  Pointer to the new child node.
+/**
+ * Set the left or right child of a given node.
+ * @n:    Pointer to the current node
+ * @side: Direction to set (RB_LEFT or RB_RIGHT)
+ * @val:  Pointer to the new child node
+ *
+ * For right children, sets the pointer directly. For left children,
+ * preserves the color bit (LSB) while updating the pointer value.
  */
 static inline void set_child(rb_node_t *n, rb_side_t side, void *val)
 {
@@ -104,22 +109,14 @@ static inline void set_red(rb_node_t *n)
     set_color(n, RB_RED);
 }
 
-/* Traverse the red-black tree and stack nodes along the path.
- * @tree:  Pointer to the red-black tree.
- * @node:  Node to search for or the position where it would be inserted.
- * @stack: Array to hold the path of nodes encountered during traversal.
+/* Find a node in the tree and build traversal stack.
+ * @tree:  Pointer to the red-black tree structure
+ * @node:  Node to search for or insertion position
+ * @stack: Output array for traversal path (size >= max_depth)
  *
- * This function traverses the red-black tree starting from the root, looking
- * for a node that either matches the given 'node' parameter or reaches a leaf
- * where the 'node' would be inserted. All nodes along the traversal path are
- * pushed onto the stack.
- *
- * Note:
- * - The tree must not be empty.
- * - The stack must be large enough to accommodate at least `tree->max_depth`
- *   entries.
- *
- * Return: The number of nodes pushed onto the stack.
+ * Traverses the tree from root to either find the exact node or determine
+ * its insertion position. Records all nodes visited during traversal in
+ * the stack for use in subsequent rebalancing operations.
  */
 static unsigned find_and_stack(rb_t *tree, rb_node_t *node, rb_node_t **stack)
 {
@@ -155,13 +152,8 @@ static unsigned find_and_stack(rb_t *tree, rb_node_t *node, rb_node_t **stack)
 }
 
 /* Retrieve the minimum or maximum node from the red-black tree.
- * @tree: Pointer to the red-black tree.
- * @side: Direction to traverse (left/minimum or right/maximum).
- *
- * This function traverses the tree starting from the root, following the
- * specified direction ('side'). It continues moving left (for minimum) or
- * right (for maximum) until reaching a leaf node, returning the last non-null
- * node encountered.
+ * @tree: Pointer to the red-black tree structure
+ * @side: Direction to traverse (RB_LEFT for min, RB_RIGHT for max)
  */
 rb_node_t *__rb_get_minmax(rb_t *tree, rb_side_t side)
 {
@@ -171,25 +163,31 @@ rb_node_t *__rb_get_minmax(rb_t *tree, rb_side_t side)
     return n;
 }
 
-/* Check if a child node is the left or right child.
- * @parent: Pointer to the parent node.
- * @child:  Pointer to the child node.
+/* Determine which side a child node is on relative to its parent.
+ * @parent: Pointer to the parent node
+ * @child:  Pointer to the child node
  */
 static inline rb_side_t get_side(rb_node_t *parent, const rb_node_t *child)
 {
     return (get_child(parent, RB_RIGHT) == child) ? RB_RIGHT : RB_LEFT;
 }
 
-/* Swap the positions of the two nodes at the top of the given stack, updating
- * the stack accordingly. The colors of the nodes remain unchanged.
- * This operation performs the following transformation (or its mirror image if
- * node N is on the opposite side of P):
+/* Perform a rotation between parent and child nodes.
+ * @stack:   Array of node pointers representing traversal path
+ * @stacksz: Number of nodes in the stack
  *
+ * Rotates the top two nodes in the stack (parent and child) while preserving
+ * the binary search tree property. Updates all affected pointers including
+ * grandparent connections. Node colors remain unchanged.
+ *
+ * Transformation example (or mirror image for right rotation):
  *        P          N
- *       /\         /\
- *      N  c  -->  a   P
- *     /\             /\
- *    a  b           b  c
+ *       / \        / \
+ *      N   c  ->  a   P
+ *     / \            / \
+ *    a   b          b   c
+ *
+ * The stack is updated to reflect the new node positions after rotation.
  */
 static void rotate(rb_node_t **stack, unsigned stacksz)
 {
@@ -231,13 +229,21 @@ static void rotate(rb_node_t **stack, unsigned stacksz)
     stack[stacksz - 1] = parent;
 }
 
-/* Resolve double-red violation in the red-black tree.
- * @stack:   Array of node pointers representing the traversal path.
- * @stacksz: Current size of the stack (number of nodes).
+/* Fix red-red violations after node insertion.
+ * @stack:   Array of node pointers from root to newly inserted node
+ * @stacksz: Current size of the stack (path length)
  *
- * This function fixes a red-red violation where both the top node and its
- * parent are red. It iteratively restores the red-black tree properties
- * by adjusting colors and performing rotations as needed.
+ * Restores red-black tree properties when a red node has a red parent.
+ * Uses two main strategies:
+ *
+ * Case 1 (Red aunt): Recolor parent, aunt to black and grandparent to red,
+ * then propagate the potential violation upward.
+ *
+ * Case 2 (Black aunt): Perform rotations to restructure the tree, ensuring
+ * the red node has a black parent without affecting black height.
+ *
+ * The algorithm terminates when either the violation is resolved or the
+ * root is reached (root is always colored black).
  */
 static void fix_extra_red(rb_node_t **stack, unsigned stacksz)
 {
@@ -332,16 +338,23 @@ void rb_insert(rb_t *tree, rb_node_t *node)
     tree->root = stack[0];
 }
 
-/* Handle the case for node N (at the top of the stack) which, after a deletion,
- * has a "black deficit" in its subtree. By construction, N must be black (if
- * it were red, recoloring would resolve the issue, and this function would not
- * be needed). This function rebalances the tree to maintain red-black
- * properties.
+/* Fix black height deficit after node removal.
+ * @stack:     Array of node pointers from root to affected node
+ * @stacksz:   Current size of the stack (path length)
+ * @null_node: Temporary placeholder for removed black leaf (or NULL)
  *
- * The "null_node" pointer is used when removing a black node without children.
- * For simplicity, a real node is needed during the tree adjustments, so we use
- * "null_node" temporarily and replace it with a NULL child in the parent when
- * the operation is complete.
+ * Restores red-black tree properties when a black node removal creates
+ * a "black deficit" - one subtree has one fewer black node than required.
+ * The affected node (at stack top) must be black by construction.
+ *
+ * Handles several cases:
+ * - Red sibling: Rotate to make sibling black, then continue
+ * - Black sibling with black children: Recolor sibling red, propagate deficit
+ * up
+ * - Black sibling with red child: Rotate and recolor to eliminate deficit
+ *
+ * The null_node parameter is used as a temporary placeholder when removing
+ * a black leaf node. It gets replaced with NULL once rebalancing is complete.
  */
 static void fix_missing_black(rb_node_t **stack,
                               unsigned stacksz,
@@ -587,9 +600,9 @@ bool rb_contains(rb_t *tree, rb_node_t *node)
     return n == node;
 }
 
-
 /* The "foreach" traversal uses a dynamic stack allocated with alloca(3) or
  * pre-allocated temporary space.
+ *
  * The current node is stored at stack[top], and its parent is located at
  * stack[top-1]. The is_left[] array keeps track of the relationship between
  * each node and its parent (i.e., if is_left[top] is true, then stack[top]
@@ -667,7 +680,10 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
 }
 
 #if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
-/* Helper function to update cache pointers after node insertion */
+/* Update cached minimum/maximum pointers after node insertion.
+ * @tree: Pointer to the cached red-black tree structure
+ * @node: Pointer to the newly inserted node
+ */
 static void update_cache_insert(rb_cached_t *tree, rb_node_t *node)
 {
 #if _RB_ENABLE_LEFTMOST_CACHE
@@ -683,7 +699,10 @@ static void update_cache_insert(rb_cached_t *tree, rb_node_t *node)
 #endif
 }
 
-/* Helper function to update cache pointers after node removal */
+/* Update cached minimum/maximum pointers after node removal.
+ * @tree: Pointer to the cached red-black tree structure
+ * @node: Pointer to the node being removed
+ */
 static void update_cache_remove(rb_cached_t *tree, rb_node_t *node)
 {
 #if _RB_ENABLE_LEFTMOST_CACHE
@@ -711,7 +730,10 @@ void rb_cached_remove(rb_cached_t *tree, rb_node_t *node)
     update_cache_remove(tree, node);
 }
 
-/* Optimized foreach next function for cached trees */
+/* Get the next node in cached tree traversal.
+ * @tree: Pointer to the cached red-black tree structure
+ * @f:    Pointer to the traversal state structure
+ */
 rb_node_t *__rb_cached_foreach_next(rb_cached_t *tree, rb_foreach_t *f)
 {
     /* Simply delegate to standard implementation - the real optimization

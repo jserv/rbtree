@@ -150,30 +150,51 @@ rb_node_t *__rb_child(rb_node_t *node, rb_side_t side);
 int __rb_is_black(rb_node_t *node);
 rb_node_t *__rb_get_minmax(rb_t *tree, rb_side_t side);
 
-/* Insert a new node into the red-black tree.
- * @tree: Pointer to the red-black tree.
- * @node: Pointer to the node to be inserted.
+/**
+ * Insert a new node into the red-black tree.
+ * @tree: Pointer to the red-black tree structure
+ * @node: Pointer to the node to be inserted (must be uninitialized)
  *
- * This function initializes the new node, finds its insertion point,
- * and adjusts the tree to maintain red-black properties. It handles
- * the root case, allocates the traversal stack, performs the insertion,
- * and fixes any violations caused by the insertion.
+ * Inserts a new node into the tree while maintaining red-black properties.
+ * The node's children are automatically initialized to NULL, and its position
+ * is determined by the tree's comparison function. Tree rebalancing is
+ * performed as needed to preserve invariants.
+ *
+ * Complexity: O(log N) where N is the number of nodes in the tree
+ *
+ * Note: The node must not already be part of any tree structure.
  */
 void rb_insert(rb_t *tree, rb_node_t *node);
 
-/* Remove a node from the red-black tree.
- * @tree: Pointer to the red-black tree.
- * @node: Pointer to the node to be removed.
+/**
+ * Remove a node from the red-black tree.
+ * @tree: Pointer to the red-black tree structure
+ * @node: Pointer to the node to be removed
  *
- * This function handles the removal of a node from the red-black tree,
- * rebalancing the tree as necessary to maintain red-black properties.
+ * Removes the specified node from the tree while maintaining red-black
+ * properties. If the node has two children, it is replaced by its in-order
+ * predecessor. Tree rebalancing is performed as needed to preserve invariants.
+ *
+ * Complexity: O(log N) where N is the number of nodes in the tree
+ *
+ * Note: If the node is not found in the tree, this function has no effect.
  */
 void rb_remove(rb_t *tree, rb_node_t *node);
 
 #if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
-/* Initialize a cached red-black tree.
- * @tree: Pointer to the cached red-black tree.
- * @cmp_func: Comparison function for node ordering.
+/**
+ * Initialize a cached red-black tree.
+ * @tree: Pointer to the cached red-black tree structure
+ * @cmp_func: Comparison function for determining node ordering
+ *
+ * Initializes an empty cached red-black tree with the specified comparison
+ * function. The cached tree maintains pointers to minimum and/or maximum
+ * nodes for O(1) access, depending on build-time configuration.
+ *
+ * The comparison function must implement a strict weak ordering:
+ * - cmp(a,b) returns true if a < b, false otherwise
+ * - Antisymmetric: if cmp(a,b) then !cmp(b,a)
+ * - Transitive: if cmp(a,b) && cmp(b,c) then cmp(a,c)
  */
 static inline void rb_cached_init(rb_cached_t *tree, rb_cmp_t cmp_func)
 {
@@ -188,34 +209,61 @@ static inline void rb_cached_init(rb_cached_t *tree, rb_cmp_t cmp_func)
 #endif
 }
 
-/* Insert a new node into the cached red-black tree.
- * @tree: Pointer to the cached red-black tree.
- * @node: Pointer to the node to be inserted.
+/**
+ * Insert a new node into the cached red-black tree.
+ * @tree: Pointer to the cached red-black tree structure
+ * @node: Pointer to the node to be inserted (must be uninitialized)
+ *
+ * Inserts a node into the cached tree and updates cache pointers as needed.
+ * When leftmost caching is enabled, minimum access remains O(1). When
+ * rightmost caching is enabled, maximum access remains O(1).
+ *
+ * Complexity: O(log N) insertion + O(1) cache update
  */
 void rb_cached_insert(rb_cached_t *tree, rb_node_t *node);
 
-/* Remove a node from the cached red-black tree.
- * @tree: Pointer to the cached red-black tree.
- * @node: Pointer to the node to be removed.
+/**
+ * Remove a node from the cached red-black tree.
+ * @tree: Pointer to the cached red-black tree structure
+ * @node: Pointer to the node to be removed
+ *
+ * Removes a node from the cached tree and updates cache pointers as needed.
+ * If the removed node was cached as minimum or maximum, the cache is updated
+ * by finding the new extreme values.
+ *
+ * Complexity: O(log N) removal + O(log N) cache update if needed
  */
 void rb_cached_remove(rb_cached_t *tree, rb_node_t *node);
 #endif
 
-/* Return the lowest-sorted member of the red-black tree */
+/**
+ * Return the lowest-sorted member of the red-black tree.
+ * @tree: Pointer to the red-black tree structure
+ *
+ * Complexity: O(log N) where N is the number of nodes
+ */
 static inline rb_node_t *rb_get_min(rb_t *tree)
 {
     return __rb_get_minmax(tree, RB_LEFT);
 }
 
-/* Return the highest-sorted member of the red-black tree */
+/**
+ * Return the highest-sorted member of the red-black tree.
+ * @tree: Pointer to the red-black tree structure
+ *
+ * Complexity: O(log N) where N is the number of nodes
+ */
 static inline rb_node_t *rb_get_max(rb_t *tree)
 {
     return __rb_get_minmax(tree, RB_RIGHT);
 }
 
 #if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
-/* Return the lowest-sorted member of the cached red-black tree (O(1) when
- * cached)
+/**
+ * Return the lowest-sorted member of the cached red-black tree.
+ * @tree: Pointer to the cached red-black tree structure
+ *
+ * Complexity: O(1) when leftmost caching enabled, O(log N) otherwise
  */
 static inline rb_node_t *rb_cached_get_min(rb_cached_t *tree)
 {
@@ -226,8 +274,11 @@ static inline rb_node_t *rb_cached_get_min(rb_cached_t *tree)
 #endif
 }
 
-/* Return the highest-sorted member of the cached red-black tree (O(1) when
- * cached)
+/**
+ * Return the highest-sorted member of the cached red-black tree.
+ * @tree: Pointer to the cached red-black tree structure
+ *
+ * Complexity: O(1) when rightmost caching enabled, O(log N) otherwise
  */
 static inline rb_node_t *rb_cached_get_max(rb_cached_t *tree)
 {
@@ -238,51 +289,72 @@ static inline rb_node_t *rb_cached_get_max(rb_cached_t *tree)
 #endif
 }
 
-/* Check if the cached tree is empty */
+/**
+ * Check if the cached red-black tree is empty.
+ * @tree: Pointer to the cached red-black tree structure
+ *
+ * Returns: true if the tree contains no nodes, false otherwise
+ * Complexity: O(1)
+ */
 static inline bool rb_cached_empty(rb_cached_t *tree)
 {
     return tree->rb_root.root == NULL;
 }
 #endif
 
-/* Check if the given node is present in the red-black tree.
- * @tree: Pointer to the red-black tree.
- * @node: Pointer to the node to search for.
+/**
+ * Check if the given node is present in the red-black tree.
+ * @tree: Pointer to the red-black tree structure
+ * @node: Pointer to the node to search for
  *
- * This function searches the tree to determine if the specified node is
- * present. It starts from the root and traverses the tree based on the
- * comparison function until it finds the node or reaches a leaf. The function
- * does not internally dereference the node pointer (though the tree's
- * 'cmp_func' callback might); it only tests for pointer equality with nodes
- * already in the tree. As a result, this function can be used to implement a
- * "set" construct by comparing pointers directly.
+ * Searches the tree to determine if the specified node is present by
+ * traversing from the root using the comparison function. The search
+ * terminates when either the exact node is found (pointer equality) or
+ * a leaf is reached.
+ *
+ * Returns: true if the node is found, false otherwise
+ * Complexity: O(log N) where N is the number of nodes
+ *
+ * Note: This function tests for pointer equality, not value equality,
+ * making it suitable for implementing set semantics.
  */
 bool rb_contains(rb_t *tree, rb_node_t *node);
 
 #if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
-/* Check if the given node is present in the cached red-black tree.
- * @tree: Pointer to the cached red-black tree.
- * @node: Pointer to the node to search for.
+/**
+ * Check if the given node is present in the cached red-black tree.
+ * @tree: Pointer to the cached red-black tree structure
+ * @node: Pointer to the node to search for
  *
- * This optimized version for cached trees can perform early termination
- * when the node is outside the cached min/max bounds, potentially avoiding
- * traversal entirely. When leftmost caching is enabled and the node compares
- * less than the minimum, the function returns false immediately (O(1)).
- * Similarly for rightmost caching and nodes greater than the maximum.
+ * Optimized search that can perform early bounds checking using cached
+ * minimum/maximum values. If the node is outside the cached bounds,
+ * returns false without tree traversal.
+ *
+ * Returns: true if the node is found, false otherwise
+ * Complexity: O(1) for out-of-bounds nodes, O(log N) otherwise
+ *
+ * Optimization: When caching is enabled, nodes outside [min,max] bounds
+ * are rejected immediately without traversal.
  */
 bool rb_cached_contains(rb_cached_t *tree, rb_node_t *node);
 #endif
 
-/* Helper structure for non-recursive red-black tree traversal.
+/**
+ * Helper structure for non-recursive red-black tree traversal.
  *
- * This structure is used by the RB_FOREACH and RB_FOREACH_CONTAINER macros
- * to perform an in-order traversal of a red-black tree without recursion.
+ * Used internally by RB_FOREACH and related macros to maintain traversal state
+ * during in-order tree traversal. The structure uses an optimized single-buffer
+ * layout to minimize memory allocation overhead and improve cache locality.
  *
- * Memory layout optimization:
- * - Uses a single buffer allocation instead of two separate arrays
- * - Node pointers are stored at the beginning of the buffer
- * - Direction flags are packed into a bit array at the end
- * - This improves cache locality and reduces memory overhead
+ * Memory Layout:
+ * - Node pointers stored at buffer start
+ * - Direction flags packed as bit array at buffer end
+ * - Single allocation reduces malloc overhead
+ * - Improved cache locality during traversal
+ *
+ * Fields:
+ * @buffer: Single allocation containing both node stack and direction flags
+ * @top:    Current stack position (-1=uninitialized, -2=done, >=0=active)
  */
 typedef struct {
     void *buffer; /**< Single allocation for both stack and direction flags */
@@ -324,22 +396,27 @@ typedef struct {
 
 rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f);
 
-/* In-order traversal of a red-black tree without recursion.
- * @tree: Pointer to the red-black tree ('rb_t') to traverse.
- * @node: Name of a local variable of type 'rb_node_t *' to use as the iterator.
+/**
+ * In-order traversal of a red-black tree without recursion.
+ * @tree: Pointer to the red-black tree ('rb_t') to traverse
+ * @node: Name of a local variable of type 'rb_node_t *' to use as iterator
  *
- * This macro performs an in-order traversal of the red-black tree using a
- * non-recursive approach. It sets up a "foreach" loop for iterating through
- * the nodes of the tree in sorted order. The macro avoids recursion by using
- * an internal stack for traversal, providing a balance between code size
- * and efficiency.
+ * Performs non-recursive in-order traversal using an internal stack.
+ * Nodes are visited in sorted order according to the tree's comparison
+ * function. The traversal state is automatically managed using stack-allocated
+ * buffers.
  *
- * Notes:
- * - This loop is not safe for concurrent modifications. Changing the tree
- *   structure during traversal may result in undefined behavior, such as
- *   nodes being skipped or visited multiple times.
- * - The macro expands its arguments multiple times. Avoid using expressions
- *   with side effects (e.g., function calls) as arguments.
+ * Usage:
+ *   RB_FOREACH(my_tree, current_node) {
+ *       // Process current_node here
+ *   }
+ *
+ * Complexity: O(N) total time, O(log N) space for traversal stack
+ *
+ * Thread Safety: Not safe for concurrent modifications
+ *
+ * Warning: Modifying the tree structure during traversal results in
+ * undefined behavior. The macro expands arguments multiple times.
  */
 #define RB_FOREACH(tree, node)                            \
     for (rb_foreach_t __f = _RB_FOREACH_INIT(tree, node); \
@@ -347,11 +424,22 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f);
          /**/)
 
 #ifndef container_of
-/* Compute the address of the object containing a given member.
- * @ptr:    Pointer to the member variable.
- * @type:   Type of the structure that includes the member.
- * @member: Name of the member variable in the structure @type.
- * Return a pointer to the enclosing object of type @type.
+/**
+ * Compute the address of the object containing a given member.
+ * @ptr:    Pointer to the member variable
+ * @type:   Type of the structure that includes the member
+ * @member: Name of the member variable in the structure @type
+ *
+ * This macro calculates the address of a containing structure given a pointer
+ * to one of its members. It's essential for converting from rb_node_t pointers
+ * back to user-defined container structures in intrusive data structures.
+ *
+ * Returns: Pointer to the enclosing object of type @type
+ *
+ * Example:
+ *   struct my_data { int value; rb_node_t node; };
+ *   rb_node_t *node_ptr = ...;
+ *   struct my_data *data = container_of(node_ptr, struct my_data, node);
  */
 #define container_of(ptr, type, member)                              \
     __extension__({                                                  \
@@ -360,17 +448,24 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f);
     })
 #endif
 
-/* In-order traversal of a red-black tree with container handling.
- * @tree:  Pointer to the red-black tree ('rb_t') to traverse.
- * @node:  Name of the local iterator variable, which is a pointer to the
- *         container type.
- * @field: Name of the 'rb_node_t' member within the container struct.
+/**
+ * In-order traversal of a red-black tree with container handling.
+ * @tree:  Pointer to the red-black tree ('rb_t') to traverse
+ * @node:  Name of local iterator variable (pointer to container type)
+ * @field: Name of the 'rb_node_t' member within the container struct
  *
- * This macro performs an in-order traversal of a red-black tree, similar to
- * RB_FOREACH. However, instead of iterating over raw 'rb_node_t' nodes, it
- * iterates over user-defined container structs that embed an 'rb_node_t'
- * member. The macro automatically resolves the container type using the
- * 'container_of' macro.
+ * Traverses container objects that embed rb_node_t members, automatically
+ * resolving from node pointers to container pointers using container_of.
+ * This enables iteration over user-defined structures in sorted order.
+ *
+ * Usage:
+ *   RB_FOREACH_CONTAINER(my_tree, entry, rb_node) {
+ *       // Process entry (container struct) here
+ *   }
+ *
+ * Complexity: O(N) total time, O(log N) space for traversal stack
+ *
+ * Note: The container type is automatically deduced from the node variable.
  */
 #define RB_FOREACH_CONTAINER(tree, node, field)                               \
     for (rb_foreach_t __f = _RB_FOREACH_INIT(tree, node); ({                  \
@@ -381,25 +476,41 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f);
          /**/)
 
 #if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
-/* Optimized in-order traversal of a cached red-black tree.
- * @tree: Pointer to the cached red-black tree ('rb_cached_t') to traverse.
- * @node: Name of a local variable of type 'rb_node_t *' to use as the iterator.
+/**
+ * Optimized in-order traversal of a cached red-black tree.
+ * @tree: Pointer to the cached red-black tree ('rb_cached_t') to traverse
+ * @node: Name of a local variable of type 'rb_node_t *' to use as iterator
  *
- * This macro is similar to RB_FOREACH but optimized for cached trees. When
- * leftmost caching is enabled, iterator initialization is O(1) instead of O(log
- * N).
+ * Similar to RB_FOREACH but optimized for cached trees. The primary benefit
+ * comes from O(1) access to the leftmost node when leftmost caching is enabled,
+ * rather than the O(log N) traversal to find the starting point.
+ *
+ * Usage:
+ *   RB_CACHED_FOREACH(my_cached_tree, current_node) {
+ *       // Process current_node here
+ *   }
+ *
+ * Complexity: O(1) initialization + O(N) traversal when leftmost cache enabled
  */
 #define RB_CACHED_FOREACH(tree, node)                                 \
     for (rb_foreach_t __f = _RB_FOREACH_INIT(&(tree)->rb_root, node); \
          ((node) = __rb_cached_foreach_next((tree), &__f));           \
          /**/)
 
-/* Optimized in-order traversal of a cached red-black tree with container
- * handling.
- * @tree:  Pointer to the cached red-black tree ('rb_cached_t') to traverse.
- * @node:  Name of the local iterator variable, which is a pointer to the
- *         container type.
- * @field: Name of the 'rb_node_t' member within the container struct.
+/**
+ * Optimized traversal of cached tree with container handling.
+ * @tree:  Pointer to the cached red-black tree ('rb_cached_t') to traverse
+ * @node:  Name of local iterator variable (pointer to container type)
+ * @field: Name of the 'rb_node_t' member within the container struct
+ *
+ * Combines the benefits of cached tree optimization with automatic container
+ * resolution. When leftmost caching is enabled, provides O(1) initialization
+ * plus efficient traversal of user-defined container structures.
+ *
+ * Usage:
+ *   RB_CACHED_FOREACH_CONTAINER(my_cached_tree, entry, rb_node) {
+ *       // Process entry (container struct) here
+ *   }
  */
 #define RB_CACHED_FOREACH_CONTAINER(tree, node, field)                        \
     for (rb_foreach_t __f = _RB_FOREACH_INIT(&(tree)->rb_root, node); ({      \
@@ -409,7 +520,13 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f);
          });                                                                  \
          /**/)
 
-/* Forward declaration for cached foreach implementation */
+/**
+ * Get the next node in cached tree in-order traversal.
+ * @tree: Pointer to the cached red-black tree structure
+ * @f:    Pointer to the traversal state structure
+ *
+ * Returns: Next node in traversal order, or NULL when traversal complete
+ */
 rb_node_t *__rb_cached_foreach_next(rb_cached_t *tree, rb_foreach_t *f);
 #endif
 
