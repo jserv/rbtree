@@ -25,6 +25,22 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* Compile-time verification that pointer alignment is sufficient for color bit
+ * storage. The implementation stores the red/black color in the least
+ * significant bit (LSB) of the left child pointer, which requires at least
+ * 2-byte pointer alignment. This assertion ensures the assumption is valid on
+ * the target platform.
+ */
+#ifdef __STDC_VERSION__
+#if __STDC_VERSION__ >= 201112L
+_Static_assert(_Alignof(void *) >= 2,
+               "Pointer alignment insufficient for color bit storage");
+#endif
+#else
+/* For older C standards or compilers without _Static_assert */
+typedef char __rbtree_alignment_check[((_Alignof(void *) >= 2) ? 1 : -1)];
+#endif
+
 /* Although the use of alloca(3) is generally discouraged due to the lack of
  * guarantees that it returns a valid and usable memory block, it does provide
  * temporary space that is automatically freed upon function return. This

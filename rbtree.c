@@ -11,6 +11,46 @@ _Static_assert(_RB_MAX_TREE_DEPTH >= 4,
                "Insufficient buffer space for safety margin");
 #endif
 
+#if _RB_ENABLE_SAFETY_CHECKS && !defined(NDEBUG)
+/* Runtime verification of pointer alignment assumptions.
+ * This function verifies that the pointer alignment guarantees required
+ * for color bit storage are actually met at runtime. While the compile-time
+ * static_assert should catch most issues, this provides additional validation
+ * in debug builds for edge cases or unusual platforms.
+ */
+static inline void __rb_verify_alignment(void)
+{
+    static int verified = 0;
+    if (verified)
+        return;
+
+    /* Test alignment with actual allocations */
+    rb_node_t test_node;
+    uintptr_t addr = (uintptr_t) &test_node;
+
+    /* Verify that node addresses are properly aligned */
+    if (addr & 1) {
+        fprintf(stderr,
+                "rbtree: FATAL - Node address 0x%lx not 2-byte aligned\n",
+                (unsigned long) addr);
+        assert(0 && "Node alignment insufficient for color bit storage");
+    }
+
+    /* Verify that pointer assignments maintain alignment */
+    rb_node_t *ptr = &test_node;
+    if (((uintptr_t) ptr) & 1) {
+        fprintf(stderr,
+                "rbtree: FATAL - Pointer value 0x%lx not 2-byte aligned\n",
+                (unsigned long) ptr);
+        assert(0 && "Pointer alignment insufficient for color bit storage");
+    }
+
+    verified = 1;
+}
+#else
+#define __rb_verify_alignment() ((void) 0)
+#endif
+
 typedef enum { RB_RED = 0, RB_BLACK = 1 } rb_color_t;
 
 /* The implementation of red-black trees reduces the code size for insertion and
@@ -303,6 +343,8 @@ static void fix_extra_red(rb_node_t **stack, unsigned stacksz)
 
 void rb_insert(rb_t *tree, rb_node_t *node)
 {
+    __rb_verify_alignment();
+
     set_child(node, RB_LEFT, NULL);
     set_child(node, RB_RIGHT, NULL);
 
@@ -466,6 +508,8 @@ static void fix_missing_black(rb_node_t **stack,
 
 void rb_remove(rb_t *tree, rb_node_t *node)
 {
+    __rb_verify_alignment();
+
     rb_node_t *tmp;
 
     /* Allocate stack for traversal. Use a fixed stack if alloca() is disabled.
