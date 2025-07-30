@@ -131,7 +131,7 @@ static unsigned find_and_stack(rb_t *tree, rb_node_t *node, rb_node_t **stack)
      * - left: target node is less than the current node.
      * - right: target node is greater than or equal to the current node.
      */
-    while (stack[sz - 1] != node && sz < (unsigned) _RB_MAX_TREE_DEPTH - 1) {
+    while (stack[sz - 1] != node) {
         rb_side_t side =
             tree->cmp_func(node, stack[sz - 1]) ? RB_LEFT : RB_RIGHT;
         rb_node_t *ch = get_child(stack[sz - 1], side);
@@ -139,13 +139,13 @@ static unsigned find_and_stack(rb_t *tree, rb_node_t *node, rb_node_t **stack)
         if (!ch)
             break;
 
-#if _RB_ENABLE_SAFETY_CHECKS
-        /* Safety check to prevent stack overflow from corrupted trees */
+        /* Check if we have room for one more node on the stack */
         if (sz >= (unsigned) _RB_MAX_TREE_DEPTH - 1) {
-            /* Tree is corrupted or has a cycle - stop traversal */
+            /* Tree is corrupted or has a cycle - stop traversal.
+             * Even without safety checks, we must prevent buffer overflow.
+             */
             break;
         }
-#endif
 
         /* Push the child node onto the stack and continue traversal. */
         stack[sz++] = ch;
