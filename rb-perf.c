@@ -419,9 +419,18 @@ int main(int argc, char *argv[])
         struct rusage usage;
         if (getrusage(RUSAGE_SELF, &usage) == 0) {
             printf("\nMemory Statistics:\n");
+#ifdef __APPLE__
+            /* On macOS, ru_maxrss is in bytes */
+            printf("Max RSS: %.2f MB\n",
+                   (double) usage.ru_maxrss / (1024 * 1024));
+            printf("Memory per node: ~%.2f bytes\n",
+                   (double) usage.ru_maxrss / count);
+#else
+            /* On Linux, ru_maxrss is in kilobytes */
             printf("Max RSS: %lu KB\n", usage.ru_maxrss);
             printf("Memory per node: ~%.2f bytes\n",
                    (double) usage.ru_maxrss * 1024 / count);
+#endif
         }
     }
 
