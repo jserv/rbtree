@@ -259,6 +259,20 @@ static inline bool rb_cached_empty(rb_cached_t *tree)
  */
 bool rb_contains(rb_t *tree, rb_node_t *node);
 
+#if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
+/* Check if the given node is present in the cached red-black tree.
+ * @tree: Pointer to the cached red-black tree.
+ * @node: Pointer to the node to search for.
+ *
+ * This optimized version for cached trees can perform early termination
+ * when the node is outside the cached min/max bounds, potentially avoiding
+ * traversal entirely. When leftmost caching is enabled and the node compares
+ * less than the minimum, the function returns false immediately (O(1)).
+ * Similarly for rightmost caching and nodes greater than the maximum.
+ */
+bool rb_cached_contains(rb_cached_t *tree, rb_node_t *node);
+#endif
+
 /* Helper structure for non-recursive red-black tree traversal.
  *
  * This structure is used by the RB_FOREACH and RB_FOREACH_CONTAINER macros

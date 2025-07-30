@@ -721,4 +721,22 @@ rb_node_t *__rb_cached_foreach_next(rb_cached_t *tree, rb_foreach_t *f)
      */
     return __rb_foreach_next(&tree->rb_root, f);
 }
+
+bool rb_cached_contains(rb_cached_t *tree, rb_node_t *node)
+{
+#if _RB_ENABLE_LEFTMOST_CACHE
+    /* Early exit if node is less than the cached minimum (O(1)) */
+    if (tree->rb_leftmost && tree->rb_root.cmp_func(node, tree->rb_leftmost))
+        return false;
+#endif
+
+#if _RB_ENABLE_RIGHTMOST_CACHE
+    /* Early exit if node is greater than the cached maximum (O(1)) */
+    if (tree->rb_rightmost && tree->rb_root.cmp_func(tree->rb_rightmost, node))
+        return false;
+#endif
+
+    /* Node is within bounds (or no cache available), perform normal search */
+    return rb_contains(&tree->rb_root, node);
+}
 #endif

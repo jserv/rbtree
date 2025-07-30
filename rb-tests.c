@@ -410,6 +410,110 @@ int main()
 
             printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
         }
+
+        /* Test rb_cached_contains() optimization */
+        {
+            printf("Testing rb_cached_contains() optimization... ");
+
+            rb_cached_init(&cached_tree, node_lessthan);
+
+            /* Test empty tree */
+            assert(!rb_cached_contains(&cached_tree, &cached_nodes[0]));
+
+            /* Insert nodes 10-19 (middle range) */
+            for (int i = 10; i < 20; i++)
+                rb_cached_insert(&cached_tree, &cached_nodes[i]);
+
+            /* Test nodes in tree */
+            for (int i = 10; i < 20; i++) {
+                assert(rb_cached_contains(&cached_tree, &cached_nodes[i]));
+                /* Should match regular contains */
+                assert(rb_cached_contains(&cached_tree, &cached_nodes[i]) ==
+                       rb_contains(&cached_tree.rb_root, &cached_nodes[i]));
+            }
+
+            /* Test nodes below minimum (should benefit from leftmost cache) */
+            for (int i = 0; i < 10; i++) {
+                assert(!rb_cached_contains(&cached_tree, &cached_nodes[i]));
+                /* Should match regular contains */
+                assert(rb_cached_contains(&cached_tree, &cached_nodes[i]) ==
+                       rb_contains(&cached_tree.rb_root, &cached_nodes[i]));
+            }
+
+            /* Test nodes above maximum (should benefit from rightmost cache if
+             * enabled) */
+            for (int i = 20; i < 30; i++) {
+                assert(!rb_cached_contains(&cached_tree, &cached_nodes[i]));
+                /* Should match regular contains */
+                assert(rb_cached_contains(&cached_tree, &cached_nodes[i]) ==
+                       rb_contains(&cached_tree.rb_root, &cached_nodes[i]));
+            }
+
+            /* Test after removing minimum - cache should update */
+            rb_node_t *old_min = rb_cached_get_min(&cached_tree);
+            rb_cached_remove(&cached_tree, old_min);
+
+            /* Old minimum should no longer be found */
+            assert(!rb_cached_contains(&cached_tree, old_min));
+            assert(!rb_contains(&cached_tree.rb_root, old_min));
+
+            /* New minimum should still be found */
+            rb_node_t *new_min = rb_cached_get_min(&cached_tree);
+            assert(rb_cached_contains(&cached_tree, new_min));
+            assert(rb_contains(&cached_tree.rb_root, new_min));
+
+            /* Test after removing maximum - cache should update */
+            rb_node_t *old_max = rb_cached_get_max(&cached_tree);
+            rb_cached_remove(&cached_tree, old_max);
+
+            /* Old maximum should no longer be found */
+            assert(!rb_cached_contains(&cached_tree, old_max));
+            assert(!rb_contains(&cached_tree.rb_root, old_max));
+
+            /* New maximum should still be found */
+            rb_node_t *new_max = rb_cached_get_max(&cached_tree);
+            assert(rb_cached_contains(&cached_tree, new_max));
+            assert(rb_contains(&cached_tree.rb_root, new_max));
+
+            /* Stress test: verify consistency across many operations */
+            for (int round = 0; round < 5; round++) {
+                /* Add some random nodes */
+                for (int i = 30 + round * 10; i < 40 + round * 10; i++)
+                    rb_cached_insert(&cached_tree, &cached_nodes[i]);
+
+                /* Test all nodes - cached and regular should always match */
+                for (int i = 0; i < MAX_NODES; i++) {
+                    bool cached_result =
+                        rb_cached_contains(&cached_tree, &cached_nodes[i]);
+                    bool regular_result =
+                        rb_contains(&cached_tree.rb_root, &cached_nodes[i]);
+
+                    if (cached_result != regular_result) {
+                        printf(
+                            "\nERROR: Mismatch for node %d (cached=%d, "
+                            "regular=%d)\n",
+                            i, cached_result, regular_result);
+                        assert(false);
+                    }
+                }
+
+                /* Remove some nodes */
+                for (int i = 30 + round * 10; i < 35 + round * 10; i++) {
+                    if (rb_cached_contains(&cached_tree, &cached_nodes[i]))
+                        rb_cached_remove(&cached_tree, &cached_nodes[i]);
+                }
+            }
+
+            /* Clean up remaining nodes */
+            rb_node_t *node;
+            while ((node = rb_cached_get_min(&cached_tree)))
+                rb_cached_remove(&cached_tree, node);
+
+            assert(rb_cached_empty(&cached_tree));
+            assert(!rb_cached_contains(&cached_tree, &cached_nodes[0]));
+
+            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+        }
     }
 #endif
 
