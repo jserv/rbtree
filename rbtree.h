@@ -56,6 +56,13 @@
 #define _RB_ENABLE_RIGHTMOST_CACHE 0
 #endif
 
+/* Enable safety checks for stack overflow and bounds checking.
+ * This adds runtime checks to prevent crashes from corrupted trees.
+ */
+#ifndef _RB_ENABLE_SAFETY_CHECKS
+#define _RB_ENABLE_SAFETY_CHECKS 1
+#endif
+
 #if _RB_DISABLE_ALLOCA == 0
 #if defined(__GNUC__) || defined(__clang__)
 #undef alloca

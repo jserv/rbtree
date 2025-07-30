@@ -121,9 +121,9 @@ static inline void set_red(rb_node_t *n)
  *
  * Return: The number of nodes pushed onto the stack.
  */
-static int find_and_stack(rb_t *tree, rb_node_t *node, rb_node_t **stack)
+static unsigned find_and_stack(rb_t *tree, rb_node_t *node, rb_node_t **stack)
 {
-    int sz = 0;
+    unsigned sz = 0;
     stack[sz++] = tree->root;
 
     /* Traverse the tree, comparing the current node with the target node.
@@ -131,13 +131,21 @@ static int find_and_stack(rb_t *tree, rb_node_t *node, rb_node_t **stack)
      * - left: target node is less than the current node.
      * - right: target node is greater than or equal to the current node.
      */
-    while (stack[sz - 1] != node && sz < (int) (_RB_MAX_TREE_DEPTH - 1)) {
+    while (stack[sz - 1] != node && sz < (unsigned) _RB_MAX_TREE_DEPTH - 1) {
         rb_side_t side =
             tree->cmp_func(node, stack[sz - 1]) ? RB_LEFT : RB_RIGHT;
         rb_node_t *ch = get_child(stack[sz - 1], side);
         /* If there is no child in the chosen direction, the search ends. */
         if (!ch)
             break;
+
+#if _RB_ENABLE_SAFETY_CHECKS
+        /* Safety check to prevent stack overflow from corrupted trees */
+        if (sz >= (unsigned) _RB_MAX_TREE_DEPTH - 1) {
+            /* Tree is corrupted or has a cycle - stop traversal */
+            break;
+        }
+#endif
 
         /* Push the child node onto the stack and continue traversal. */
         stack[sz++] = ch;
@@ -183,7 +191,7 @@ static inline rb_side_t get_side(rb_node_t *parent, const rb_node_t *child)
  *     /\             /\
  *    a  b           b  c
  */
-static void rotate(rb_node_t **stack, int stacksz)
+static void rotate(rb_node_t **stack, unsigned stacksz)
 {
     rb_node_t *parent = stack[stacksz - 2];
     rb_node_t *child = stack[stacksz - 1];
@@ -231,7 +239,7 @@ static void rotate(rb_node_t **stack, int stacksz)
  * parent are red. It iteratively restores the red-black tree properties
  * by adjusting colors and performing rotations as needed.
  */
-static void fix_extra_red(rb_node_t **stack, int stacksz)
+static void fix_extra_red(rb_node_t **stack, unsigned stacksz)
 {
     while (stacksz > 1) {
         const rb_node_t *node = stack[stacksz - 1];
@@ -302,7 +310,7 @@ void rb_insert(rb_t *tree, rb_node_t *node)
 #endif
 
     /* Find the insertion point and build the traversal stack. */
-    int stacksz = find_and_stack(tree, node, stack);
+    unsigned stacksz = find_and_stack(tree, node, stack);
     rb_node_t *parent = stack[stacksz - 1];
 
     /* Determine the side (left or right) to insert the new node. */
@@ -317,8 +325,8 @@ void rb_insert(rb_t *tree, rb_node_t *node)
     fix_extra_red(stack, stacksz);
 
     /* Update the maximum depth of the tree if necessary. */
-    if (stacksz > tree->max_depth)
-        tree->max_depth = stacksz;
+    if (stacksz > (unsigned) tree->max_depth)
+        tree->max_depth = (int) stacksz;
 
     /* Ensure the root is correctly updated after potential rotations. */
     tree->root = stack[0];
@@ -336,7 +344,7 @@ void rb_insert(rb_t *tree, rb_node_t *node)
  * the operation is complete.
  */
 static void fix_missing_black(rb_node_t **stack,
-                              int stacksz,
+                              unsigned stacksz,
                               const rb_node_t *null_node)
 {
     /* Loop upward until we reach the root */
@@ -448,7 +456,7 @@ void rb_remove(rb_t *tree, rb_node_t *node)
 #endif
 
     /* Find the node to remove and build the traversal stack. */
-    int stacksz = find_and_stack(tree, node, stack);
+    unsigned stacksz = find_and_stack(tree, node, stack);
 
     /* Node not found in the tree; return. */
     if (node != stack[stacksz - 1])
@@ -456,15 +464,15 @@ void rb_remove(rb_t *tree, rb_node_t *node)
 
     /* Case 1: Node has two children. Swap with the in-order predecessor. */
     if (get_child(node, RB_LEFT) && get_child(node, RB_RIGHT)) {
-        int stacksz0 = stacksz;
+        unsigned stacksz0 = stacksz;
         rb_node_t *hiparent = (stacksz > 1) ? stack[stacksz - 2] : NULL;
         rb_node_t *loparent, *node2 = get_child(node, RB_LEFT);
 
         /* Find the largest child on the left subtree (in-order predecessor). */
-        if (stacksz < (int) _RB_MAX_TREE_DEPTH)
+        if (stacksz < (unsigned) _RB_MAX_TREE_DEPTH)
             stack[stacksz++] = node2;
         while (get_child(node2, RB_RIGHT) &&
-               stacksz < (int) _RB_MAX_TREE_DEPTH) {
+               stacksz < (unsigned) _RB_MAX_TREE_DEPTH) {
             node2 = get_child(node2, RB_RIGHT);
             stack[stacksz++] = node2;
         }
