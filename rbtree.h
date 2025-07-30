@@ -86,6 +86,14 @@ typedef char __rbtree_alignment_check[((_Alignof(void *) >= 2) ? 1 : -1)];
 #define _RB_ENABLE_BATCH_OPS 1
 #endif
 
+/* Enable property-based invariant testing for debugging and validation.
+ * This adds comprehensive red-black tree property validation functions.
+ * Disable in production builds for minimal code size and maximum performance.
+ */
+#ifndef _RB_ENABLE_PROPERTY_VALIDATION
+#define _RB_ENABLE_PROPERTY_VALIDATION 1
+#endif
+
 #if _RB_DISABLE_ALLOCA == 0
 #if defined(__GNUC__) || defined(__clang__)
 #undef alloca
@@ -654,5 +662,94 @@ void rb_batch_commit(rb_t *tree, rb_batch_t *batch);
 void rb_cached_batch_commit(rb_cached_t *tree, rb_batch_t *batch);
 #endif
 #endif /* _RB_ENABLE_BATCH_OPS */
+
+#if _RB_ENABLE_PROPERTY_VALIDATION
+/* Property-Based Invariant Testing Support
+ *
+ * Comprehensive validation of red-black tree properties for testing and
+ * debugging. These functions verify all invariants are maintained after tree
+ * operations.
+ *
+ * See https://dl.acm.org/doi/10.1145/3597503.3639581
+ */
+
+/**
+ * Result structure for red-black tree validation.
+ *
+ * Contains detailed information about tree validity, including specific
+ * property violations and tree statistics. Used by validation functions
+ * to report comprehensive analysis results.
+ */
+typedef struct {
+    bool valid;        /**< Overall validity - true if all properties hold */
+    size_t node_count; /**< Total number of nodes in the tree */
+    int black_height;  /**< Black height (consistent across all paths) */
+
+    /* The 5 Fundamental Red-Black Tree Properties */
+    bool node_colors;      /**< Property 1: Every node is either red or black */
+    bool null_nodes_black; /**< Property 2: All null nodes are considered black
+                            */
+    bool red_children_black; /**< Property 3: Red nodes have only black children
+                              */
+    bool black_height_consistent; /**< Property 4: All paths have same black
+                                     height */
+    bool single_child_red; /**< Property 5: Single children must be red */
+
+    /* Additional validation checks */
+    bool root_is_black; /**< Root node color property (implied by properties) */
+    bool bst_property;  /**< Binary search tree ordering property */
+    bool cache_consistency; /**< Cached min/max pointers are correct */
+
+    /* Detailed error information */
+    const char *error_msg;  /**< Description of first violation found */
+    rb_node_t *error_node;  /**< Node where violation was detected */
+    int violation_property; /**< Which property was violated (1-5, 0 for other)
+                             */
+} rb_validation_t;
+
+/**
+ * Validate all red-black tree properties.
+ * @tree: Pointer to the red-black tree structure
+ *
+ * Performs comprehensive validation of all red-black tree invariants:
+ * 1. Root is black (or NULL)
+ * 2. Red nodes have only black children
+ * 3. All paths from root to leaves have the same black height
+ * 4. Binary search tree ordering is maintained
+ *
+ * Returns: Validation result with detailed analysis
+ * Complexity: O(N) where N is the number of nodes
+ *
+ * Note: This function is intended for testing and debugging. It should
+ * not be used in production code due to performance overhead.
+ */
+rb_validation_t rb_validate_tree(rb_t *tree);
+
+#if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
+/**
+ * Validate cached red-black tree properties.
+ * @tree: Pointer to the cached red-black tree structure
+ *
+ * Validates both standard red-black properties and cached tree consistency:
+ * - All standard red-black tree properties
+ * - Leftmost cache points to actual minimum (if enabled)
+ * - Rightmost cache points to actual maximum (if enabled)
+ * - Cache pointers are NULL iff tree is empty
+ *
+ * Returns: Validation result with cache-specific analysis
+ */
+rb_validation_t rb_validate_cached_tree(rb_cached_t *tree);
+#endif
+
+/**
+ * Print detailed validation report to stderr.
+ * @result: Validation result from rb_validate_tree()
+ *
+ * Outputs human-readable analysis of tree properties and any violations
+ * found. Useful for debugging test failures and understanding tree state.
+ */
+void rb_print_validation_report(const rb_validation_t *result);
+
+#endif /* _RB_ENABLE_PROPERTY_VALIDATION */
 
 #endif /* _RBTREE_H_ */

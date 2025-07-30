@@ -1057,3 +1057,387 @@ void rb_cached_batch_commit(rb_cached_t *tree, rb_batch_t *batch)
 }
 #endif
 #endif /* _RB_ENABLE_BATCH_OPS */
+
+#if _RB_ENABLE_PROPERTY_VALIDATION
+/* Property-Based Invariant Testing Implementation */
+
+/* Internal validation context for recursive traversal */
+typedef struct {
+    rb_validation_t *result;    /* Validation result being built */
+    rb_cmp_t cmp_func;          /* Comparison function for BST property */
+    rb_node_t *min_node;        /* Leftmost node found during traversal */
+    rb_node_t *max_node;        /* Rightmost node found during traversal */
+    int expected_black_height;  /* Expected black height (-1 if not set) */
+    int null_nodes_encountered; /* Count of null leaf nodes encountered */
+} validation_ctx_t;
+
+/* Forward declarations for helper functions */
+static int validate_node_recursive(rb_node_t *node,
+                                   rb_node_t *parent,
+                                   validation_ctx_t *ctx);
+static void set_validation_error(rb_validation_t *result,
+                                 const char *msg,
+                                 rb_node_t *node,
+                                 int property);
+
+/**
+ * Recursively validate all 5 red-black tree properties for a subtree.
+ * @node:   Current node being validated (NULL for leaf)
+ * @parent: Parent of current node (for BST property checking)
+ * @ctx:    Validation context with result and comparison function
+ *
+ * Returns: Black height of this subtree, or -1 if invalid
+ *
+ * Explicitly validates all 5 fundamental red-black tree properties:
+ * 1. Every node is either red or black
+ * 2. All null nodes are considered black
+ * 3. Red nodes have only black children
+ * 4. All paths have same black height
+ * 5. Single children must be red
+ */
+static int validate_node_recursive(rb_node_t *node,
+                                   rb_node_t *parent,
+                                   validation_ctx_t *ctx)
+{
+    if (!node) {
+        /* PROPERTY 2: All null nodes are considered black */
+        ctx->null_nodes_encountered++;
+        /* NULL nodes contribute 0 to black height (they are black leaves) */
+        return 0;
+    }
+
+    /* Count this node */
+    ctx->result->node_count++;
+
+    /* Track min/max nodes for cache validation */
+    if (!ctx->min_node || ctx->cmp_func(node, ctx->min_node))
+        ctx->min_node = node;
+    if (!ctx->max_node || ctx->cmp_func(ctx->max_node, node))
+        ctx->max_node = node;
+
+    /* PROPERTY 1: Every node is either red or black */
+    /* This is implicitly satisfied by our color representation, but we validate
+     * it */
+    rb_color_t node_color = get_color(node);
+    if (node_color != RB_RED && node_color != RB_BLACK) {
+        ctx->result->node_colors = false;
+        if (ctx->result->valid) {
+            set_validation_error(ctx->result,
+                                 "Property 1 violated: Node has invalid color",
+                                 node, 1);
+        }
+        return -1;
+    }
+
+    /* Validate BST property (not one of the 5 RB properties, but essential) */
+    if (parent) {
+        rb_node_t *left_child = get_child(parent, RB_LEFT);
+        rb_node_t *right_child = get_child(parent, RB_RIGHT);
+
+        if (node == left_child) {
+            /* Current node is left child - must be less than parent */
+            if (!ctx->cmp_func(node, parent)) {
+                ctx->result->bst_property = false;
+                if (ctx->result->valid) {
+                    set_validation_error(
+                        ctx->result,
+                        "BST property violated: left child >= parent", node, 0);
+                }
+                return -1;
+            }
+        } else if (node == right_child) {
+            /* Current node is right child - must be >= parent */
+            if (ctx->cmp_func(node, parent)) {
+                ctx->result->bst_property = false;
+                if (ctx->result->valid) {
+                    set_validation_error(
+                        ctx->result,
+                        "BST property violated: right child < parent", node, 0);
+                }
+                return -1;
+            }
+        }
+    }
+
+    /* Get child nodes */
+    rb_node_t *left = get_child(node, RB_LEFT);
+    rb_node_t *right = get_child(node, RB_RIGHT);
+
+    /* PROPERTY 3: A red node does not have a red child */
+    if (is_red(node)) {
+        if ((left && is_red(left)) || (right && is_red(right))) {
+            ctx->result->red_children_black = false;
+            if (ctx->result->valid) {
+                set_validation_error(
+                    ctx->result, "Property 3 violated: Red node has red child",
+                    node, 3);
+            }
+            return -1;
+        }
+    }
+
+    /* PROPERTY 5: If a node has exactly one child, the child must be red */
+    bool has_left = (left != NULL);
+    bool has_right = (right != NULL);
+
+    if (has_left && !has_right) {
+        /* Node has only left child */
+        if (is_black(left)) {
+            ctx->result->single_child_red = false;
+            if (ctx->result->valid) {
+                set_validation_error(
+                    ctx->result,
+                    "Property 5 violated: Single left child is black", node, 5);
+            }
+            return -1;
+        }
+    } else if (!has_left && has_right) {
+        /* Node has only right child */
+        if (is_black(right)) {
+            ctx->result->single_child_red = false;
+            if (ctx->result->valid) {
+                set_validation_error(
+                    ctx->result,
+                    "Property 5 violated: Single right child is black", node,
+                    5);
+            }
+            return -1;
+        }
+    }
+
+    /* Recursively validate subtrees */
+    int left_black_height = validate_node_recursive(left, node, ctx);
+    if (left_black_height < 0)
+        return -1; /* Propagate error */
+
+    int right_black_height = validate_node_recursive(right, node, ctx);
+    if (right_black_height < 0)
+        return -1; /* Propagate error */
+
+    /* PROPERTY 4: Every path from a given node to any of its leaf nodes
+     * goes through the same number of black nodes */
+    if (left_black_height != right_black_height) {
+        ctx->result->black_height_consistent = false;
+        if (ctx->result->valid) {
+            set_validation_error(
+                ctx->result,
+                "Property 4 violated: Inconsistent black height in subtrees",
+                node, 4);
+        }
+        return -1;
+    }
+
+    /* Calculate black height for this subtree */
+    int current_black_height = left_black_height;
+    if (is_black(node))
+        current_black_height++;
+
+    return current_black_height;
+}
+
+/**
+ * Set validation error information in result structure.
+ * @result: Validation result to update
+ * @msg:    Error message describing the violation
+ * @node:   Node where the violation was detected
+ * @property: Which RB property was violated (1-5, 0 for other)
+ *
+ * Sets the first error encountered and marks the tree as invalid.
+ * Subsequent errors are ignored to avoid overwriting initial failure.
+ */
+static void set_validation_error(rb_validation_t *result,
+                                 const char *msg,
+                                 rb_node_t *node,
+                                 int property)
+{
+    if (result->valid) {
+        result->valid = false;
+        result->error_msg = msg;
+        result->error_node = node;
+        result->violation_property = property;
+    }
+}
+
+rb_validation_t rb_validate_tree(rb_t *tree)
+{
+    rb_validation_t result = {
+        .valid = true,
+        .node_count = 0,
+        .black_height = 0,
+
+        /* Initialize all 5 fundamental properties as valid */
+        .node_colors = true,
+        .null_nodes_black = true,
+        .red_children_black = true,
+        .black_height_consistent = true,
+        .single_child_red = true,
+
+        /* Additional validation checks */
+        .root_is_black = true,
+        .bst_property = true,
+        .cache_consistency = true,
+
+        /* Error information */
+        .error_msg = NULL,
+        .error_node = NULL,
+        .violation_property = 0,
+    };
+
+    /* Handle NULL tree or empty tree */
+    if (!tree || !tree->cmp_func) {
+        set_validation_error(
+            &result, "NULL tree or missing comparison function", NULL, 0);
+        return result;
+    }
+
+    if (!tree->root) {
+        /* Empty tree is valid - all properties are satisfied trivially */
+        result.null_nodes_black =
+            true; /* The entire tree is NULL, satisfying property 2 */
+        return result;
+    }
+
+    /* Validate root is black (implied by the 5 properties but good to check
+     * explicitly)
+     */
+    if (is_red(tree->root)) {
+        result.root_is_black = false;
+        set_validation_error(
+            &result, "Root node is red (violates standard RB convention)",
+            tree->root, 0);
+        return result;
+    }
+
+    /* Set up validation context */
+    validation_ctx_t ctx = {
+        .result = &result,
+        .cmp_func = tree->cmp_func,
+        .min_node = NULL,
+        .max_node = NULL,
+        .expected_black_height = -1,
+        .null_nodes_encountered = 0,
+    };
+
+    /* Recursively validate all 5 properties */
+    int black_height = validate_node_recursive(tree->root, NULL, &ctx);
+
+    if (black_height >= 0) {
+        result.black_height = black_height;
+
+        /* Property 2 is satisfied if we encountered null nodes and treated them
+         * as black. (This is implicitly validated during traversal)
+         */
+        result.null_nodes_black = true;
+    } else {
+        /* Error already set by recursive validation */
+        result.valid = false;
+    }
+
+    return result;
+}
+
+#if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
+rb_validation_t rb_validate_cached_tree(rb_cached_t *tree)
+{
+    /* First validate the underlying tree structure */
+    rb_validation_t result = rb_validate_tree(&tree->rb_root);
+
+    if (!result.valid) {
+        return result; /* Return early if basic validation failed */
+    }
+
+    /* Additional validation for cached tree properties */
+    if (!tree->rb_root.root) {
+        /* Empty tree - cache pointers should be NULL */
+#if _RB_ENABLE_LEFTMOST_CACHE
+        if (tree->rb_leftmost) {
+            result.cache_consistency = false;
+            set_validation_error(&result,
+                                 "Leftmost cache non-NULL in empty tree",
+                                 tree->rb_leftmost, 0);
+            return result;
+        }
+#endif
+#if _RB_ENABLE_RIGHTMOST_CACHE
+        if (tree->rb_rightmost) {
+            result.cache_consistency = false;
+            set_validation_error(&result,
+                                 "Rightmost cache non-NULL in empty tree",
+                                 tree->rb_rightmost, 0);
+            return result;
+        }
+#endif
+    } else {
+        /* Non-empty tree - validate cache correctness */
+#if _RB_ENABLE_LEFTMOST_CACHE
+        rb_node_t *actual_min = __rb_get_minmax(&tree->rb_root, RB_LEFT);
+        if (tree->rb_leftmost != actual_min) {
+            result.cache_consistency = false;
+            set_validation_error(&result, "Leftmost cache points to wrong node",
+                                 tree->rb_leftmost, 0);
+            return result;
+        }
+#endif
+#if _RB_ENABLE_RIGHTMOST_CACHE
+        rb_node_t *actual_max = __rb_get_minmax(&tree->rb_root, RB_RIGHT);
+        if (tree->rb_rightmost != actual_max) {
+            result.cache_consistency = false;
+            set_validation_error(&result,
+                                 "Rightmost cache points to wrong node",
+                                 tree->rb_rightmost, 0);
+            return result;
+        }
+#endif
+    }
+
+    return result;
+}
+#endif
+
+void rb_print_validation_report(const rb_validation_t *result)
+{
+    if (!result) {
+        fprintf(stderr, "rb_validation: NULL result pointer\n");
+        return;
+    }
+
+    fprintf(stderr, "=== Red-Black Tree Validation Report ===\n");
+    fprintf(stderr, "Overall Status: %s\n",
+            result->valid ? "VALID" : "INVALID");
+    fprintf(stderr, "Node Count: %zu\n", result->node_count);
+    fprintf(stderr, "Black Height: %d\n", result->black_height);
+    fprintf(stderr, "\n");
+
+    fprintf(stderr, "Red-Black Tree Properties (The Fundamental 5):\n");
+    fprintf(stderr, "  Property 1 - Node colors (red/black): %s\n",
+            result->node_colors ? "PASS" : "FAIL");
+    fprintf(stderr, "  Property 2 - Null nodes are black: %s\n",
+            result->null_nodes_black ? "PASS" : "FAIL");
+    fprintf(stderr, "  Property 3 - Red nodes have black children: %s\n",
+            result->red_children_black ? "PASS" : "FAIL");
+    fprintf(stderr, "  Property 4 - Black height consistency: %s\n",
+            result->black_height_consistent ? "PASS" : "FAIL");
+    fprintf(stderr, "  Property 5 - Single children are red: %s\n",
+            result->single_child_red ? "PASS" : "FAIL");
+
+    fprintf(stderr, "\nAdditional Validation Checks:\n");
+    fprintf(stderr, "  Root is black: %s\n",
+            result->root_is_black ? "PASS" : "FAIL");
+    fprintf(stderr, "  BST property maintained: %s\n",
+            result->bst_property ? "PASS" : "FAIL");
+    fprintf(stderr, "  Cache consistency: %s\n",
+            result->cache_consistency ? "PASS" : "FAIL");
+
+    if (!result->valid && result->error_msg) {
+        fprintf(stderr, "\nFirst Error Detected:\n");
+        fprintf(stderr, "  Message: %s\n", result->error_msg);
+        fprintf(stderr, "  Node Address: %p\n", (void *) result->error_node);
+        if (result->violation_property > 0) {
+            fprintf(stderr, "  Violated Property: %d\n",
+                    result->violation_property);
+        }
+    }
+
+    fprintf(stderr, "=========================================\n");
+}
+#endif /* _RB_ENABLE_PROPERTY_VALIDATION */

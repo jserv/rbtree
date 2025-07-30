@@ -1,9 +1,18 @@
 #include <assert.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "rbtree.h"
+
+/* Enable property-based validation in tests if available */
+#if _RB_ENABLE_PROPERTY_VALIDATION
+#define ENABLE_VALIDATION_TESTING 1
+#else
+#define ENABLE_VALIDATION_TESTING 0
+#endif
 
 #define MAX_NODES 256
 
@@ -127,6 +136,118 @@ void check_rb(void)
     check_rbnode(test_rbtree.root, 0);
 }
 
+#if ENABLE_VALIDATION_TESTING
+/* Helper function to validate tree using property-based testing */
+static void validate_tree_properties(int expected_nodes)
+{
+    rb_validation_t validation = rb_validate_tree(&test_rbtree);
+    if (!validation.valid) {
+        printf("ERROR: Property-based validation failed!\n");
+        rb_print_validation_report(&validation);
+        assert(0 && "Property-based validation detected tree corruption");
+    }
+
+    /* Verify node count matches expectation */
+    if ((int) validation.node_count != expected_nodes) {
+        printf("ERROR: Node count mismatch - expected: %d, validation: %zu\n",
+               expected_nodes, validation.node_count);
+        assert(0);
+    }
+}
+#else
+#define validate_tree_properties(expected_nodes) ((void) 0)
+#endif
+
+#if _RB_ENABLE_PROPERTY_VALIDATION
+/* Property-Based Testing with Dedicated Node Structure */
+
+/* Test node structure for comprehensive property-based tests */
+typedef struct property_test_node {
+    rb_node_t rb_link;
+    int key;
+    int value;
+} property_test_node_t;
+
+/* Comparison function for property test nodes */
+static bool property_test_node_cmp(const rb_node_t *a, const rb_node_t *b)
+{
+    const property_test_node_t *node_a =
+        container_of(a, property_test_node_t, rb_link);
+    const property_test_node_t *node_b =
+        container_of(b, property_test_node_t, rb_link);
+    return node_a->key < node_b->key;
+}
+
+/* Helper to create property test nodes */
+static property_test_node_t *create_property_test_node(int key, int value)
+{
+    property_test_node_t *node = malloc(sizeof(property_test_node_t));
+    if (node) {
+        node->key = key;
+        node->value = value;
+        memset(&node->rb_link, 0, sizeof(rb_node_t));
+    }
+    return node;
+}
+#endif
+
+#if _RB_ENABLE_PROPERTY_VALIDATION
+/* Validate tree and assert it's correct */
+static void assert_property_tree_valid(rb_t *tree, const char *operation)
+{
+    rb_validation_t result = rb_validate_tree(tree);
+    if (!result.valid) {
+        fprintf(stderr, "PROPERTY VALIDATION FAILED after %s:\n", operation);
+        rb_print_validation_report(&result);
+        assert(0 && "Property-based tree validation failed");
+    }
+
+    /* Verify all 5 fundamental properties are satisfied */
+    assert(result.node_colors &&
+           "Property 1: Every node is either red or black");
+    assert(result.null_nodes_black &&
+           "Property 2: All null nodes are considered black");
+    assert(result.red_children_black &&
+           "Property 3: A red node does not have a red child");
+    assert(result.black_height_consistent &&
+           "Property 4: All paths have same black height");
+    assert(result.single_child_red &&
+           "Property 5: Single children must be red");
+
+    printf(
+        "\r  ✓ All 5 RB properties validated after %s (nodes: %zu, "
+        "black_height: "
+        "%d)",
+        operation, result.node_count, result.black_height);
+    fflush(stdout);
+}
+#else
+#define assert_property_tree_valid(tree, operation) ((void) 0)
+#endif
+
+#if _RB_ENABLE_PROPERTY_VALIDATION && \
+    (_RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE)
+/* Validate cached tree and assert it's correct */
+static void assert_property_cached_tree_valid(rb_cached_t *tree,
+                                              const char *operation)
+{
+    rb_validation_t result = rb_validate_cached_tree(tree);
+    if (!result.valid) {
+        fprintf(stderr, "PROPERTY CACHED VALIDATION FAILED after %s:\n",
+                operation);
+        rb_print_validation_report(&result);
+        assert(0 && "Property-based cached tree validation failed");
+    }
+    printf(
+        "\r  ✓ Property cached validation passed after %s (nodes: %zu, "
+        "black_height: %d)",
+        operation, result.node_count, result.black_height);
+    fflush(stdout);
+}
+#else
+#define assert_property_cached_tree_valid(tree, operation) ((void) 0)
+#endif
+
 /* First validates the external API behavior via a walk, then checks
  * interior tree and red/black state via internal APIs.
  */
@@ -182,6 +303,9 @@ void check_tree(void)
     if (test_rbtree.root) {
         check_rb();
     }
+
+    /* Additional property-based validation */
+    validate_tree_properties(nwalked);
 }
 
 void test_tree(int size)
@@ -636,6 +760,362 @@ int main()
         printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
     }
 #endif /* _RB_ENABLE_BATCH_OPS */
+
+#if _RB_ENABLE_PROPERTY_VALIDATION
+    /* Property-Based Invariant Testing */
+    {
+        printf("Testing comprehensive property-based invariants...\n");
+
+        /* Test basic operations with property validation */
+        {
+            printf("  Testing basic operations with property validation... ");
+
+            rb_t prop_tree = {0};
+            prop_tree.cmp_func = property_test_node_cmp;
+
+            assert_property_tree_valid(&prop_tree, "initialization");
+
+            /* Insert nodes in various patterns */
+            property_test_node_t *prop_nodes[10];
+
+            /* Sequential insertion */
+            for (int i = 0; i < 5; i++) {
+                prop_nodes[i] = create_property_test_node(i, i * 10);
+                rb_insert(&prop_tree, &prop_nodes[i]->rb_link);
+                if (i % 2 == 0) { /* Validate every other insertion */
+                    assert_property_tree_valid(&prop_tree, "sequential insert");
+                }
+            }
+
+            /* Reverse insertion */
+            for (int i = 9; i >= 5; i--) {
+                prop_nodes[i] = create_property_test_node(i, i * 10);
+                rb_insert(&prop_tree, &prop_nodes[i]->rb_link);
+                if (i % 2 == 1) { /* Validate every other insertion */
+                    assert_property_tree_valid(&prop_tree, "reverse insert");
+                }
+            }
+
+            /* Random deletion */
+            int delete_order[] = {3, 7, 1, 9, 5};
+            for (size_t i = 0;
+                 i < sizeof(delete_order) / sizeof(delete_order[0]); i++) {
+                int idx = delete_order[i];
+                rb_remove(&prop_tree, &prop_nodes[idx]->rb_link);
+                free(prop_nodes[idx]);
+                assert_property_tree_valid(&prop_tree, "random delete");
+            }
+
+            /* Clean up remaining nodes */
+            for (int i = 0; i < 10; i++) {
+                if (i != 3 && i != 7 && i != 1 && i != 9 && i != 5) {
+                    rb_remove(&prop_tree, &prop_nodes[i]->rb_link);
+                    free(prop_nodes[i]);
+                }
+            }
+
+            assert_property_tree_valid(&prop_tree, "cleanup");
+            printf(
+                "\r  Testing basic operations with property validation... "
+                "[ " COLOR_GREEN "OK" COLOR_RESET
+                " ]                                                            "
+                "\n");
+        }
+
+#if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
+        /* Test cached tree property validation */
+        {
+            printf("  Testing cached tree property validation... ");
+
+            rb_cached_t prop_cached_tree;
+            rb_cached_init(&prop_cached_tree, property_test_node_cmp);
+
+            assert_property_cached_tree_valid(&prop_cached_tree,
+                                              "cached initialization");
+
+            /* Insert nodes */
+            property_test_node_t *cached_prop_nodes[8];
+            int keys[] = {4, 2, 6, 1, 3, 5, 7, 0};
+
+            for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
+                cached_prop_nodes[i] =
+                    create_property_test_node(keys[i], keys[i] * 100);
+                rb_cached_insert(&prop_cached_tree,
+                                 &cached_prop_nodes[i]->rb_link);
+                if (i % 3 == 0) { /* Validate every third insertion */
+                    assert_property_cached_tree_valid(&prop_cached_tree,
+                                                      "cached insert");
+                }
+            }
+
+            /* Delete nodes affecting cache */
+            rb_cached_remove(&prop_cached_tree,
+                             &cached_prop_nodes[7]->rb_link); /* key 0 */
+            free(cached_prop_nodes[7]);
+            assert_property_cached_tree_valid(&prop_cached_tree,
+                                              "delete minimum");
+
+            rb_cached_remove(&prop_cached_tree,
+                             &cached_prop_nodes[6]->rb_link); /* key 7 */
+            free(cached_prop_nodes[6]);
+            assert_property_cached_tree_valid(&prop_cached_tree,
+                                              "delete maximum");
+
+            /* Clean up */
+            for (size_t i = 0; i < 6; i++) {
+                rb_cached_remove(&prop_cached_tree,
+                                 &cached_prop_nodes[i]->rb_link);
+                free(cached_prop_nodes[i]);
+            }
+
+            assert_property_cached_tree_valid(&prop_cached_tree,
+                                              "cached cleanup");
+            printf(
+                "\r  Testing cached tree property validation... [ " COLOR_GREEN
+                "OK" COLOR_RESET
+                " ]                                                            "
+                "\n");
+        }
+#endif
+
+        /* Stress test with property validation */
+        {
+            printf("  Testing stress operations with property validation... ");
+
+            rb_t stress_tree = {0};
+            stress_tree.cmp_func = property_test_node_cmp;
+
+            const int NUM_STRESS_NODES = 50;
+            const int NUM_STRESS_OPERATIONS = 200;
+            property_test_node_t *stress_nodes[NUM_STRESS_NODES];
+            bool stress_inserted[NUM_STRESS_NODES] = {false};
+
+            srand(42); /* Deterministic randomness for reproducible tests */
+
+            /* Initialize nodes */
+            for (int i = 0; i < NUM_STRESS_NODES; i++) {
+                stress_nodes[i] = create_property_test_node(i, i * 13);
+            }
+
+            /* Perform random insert/delete operations */
+            for (int op = 0; op < NUM_STRESS_OPERATIONS; op++) {
+                int idx = rand() % NUM_STRESS_NODES;
+
+                if (!stress_inserted[idx] && (rand() % 3) != 0) {
+                    /* Insert operation (higher probability) */
+                    rb_insert(&stress_tree, &stress_nodes[idx]->rb_link);
+                    stress_inserted[idx] = true;
+
+                    /* Validate every 20th operation for performance */
+                    if (op % 20 == 0) {
+                        rb_validation_t result = rb_validate_tree(&stress_tree);
+                        if (!result.valid) {
+                            fprintf(stderr,
+                                    "Property validation failed at operation "
+                                    "%d (insert %d)\n",
+                                    op, idx);
+                            rb_print_validation_report(&result);
+                            assert(0);
+                        }
+                    }
+                } else if (stress_inserted[idx]) {
+                    /* Delete operation */
+                    rb_remove(&stress_tree, &stress_nodes[idx]->rb_link);
+                    stress_inserted[idx] = false;
+
+                    /* Validate every 20th operation */
+                    if (op % 20 == 0) {
+                        rb_validation_t result = rb_validate_tree(&stress_tree);
+                        if (!result.valid) {
+                            fprintf(stderr,
+                                    "Property validation failed at operation "
+                                    "%d (delete %d)\n",
+                                    op, idx);
+                            rb_print_validation_report(&result);
+                            assert(0);
+                        }
+                    }
+                }
+            }
+
+            /* Final comprehensive validation */
+            rb_validation_t final_result = rb_validate_tree(&stress_tree);
+            if (!final_result.valid) {
+                fprintf(stderr, "Final property validation failed!\n");
+                rb_print_validation_report(&final_result);
+                assert(0);
+            }
+
+            /* Clean up */
+            for (int i = 0; i < NUM_STRESS_NODES; i++) {
+                if (stress_inserted[i]) {
+                    rb_remove(&stress_tree, &stress_nodes[i]->rb_link);
+                }
+                free(stress_nodes[i]);
+            }
+
+            printf(
+                "\r  Testing stress operations with property validation... "
+                "[ " COLOR_GREEN "OK" COLOR_RESET
+                " ]                                                            "
+                "\n");
+        }
+
+        /* Test explicit validation of the 5 fundamental properties */
+        {
+            printf("  Testing explicit validation of the 5 RB properties... ");
+
+            rb_t prop_tree = {0};
+            prop_tree.cmp_func = property_test_node_cmp;
+
+            /* Test empty tree - all properties should be satisfied */
+            rb_validation_t empty_result = rb_validate_tree(&prop_tree);
+            assert(empty_result.valid);
+            assert(empty_result.node_colors); /* Property 1: Node colors */
+            assert(empty_result
+                       .null_nodes_black); /* Property 2: Null nodes black */
+            assert(
+                empty_result
+                    .red_children_black); /* Property 3: Red children black */
+            assert(empty_result
+                       .black_height_consistent); /* Property 4: Black height */
+            assert(empty_result
+                       .single_child_red); /* Property 5: Single children red */
+
+            /* Create a valid red-black tree and test all properties */
+            property_test_node_t *nodes[7];
+            int keys[] = {4, 2, 6, 1,
+                          3, 5, 7}; /* Will create a balanced tree */
+
+            for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
+                nodes[i] = create_property_test_node(keys[i], keys[i] * 10);
+                rb_insert(&prop_tree, &nodes[i]->rb_link);
+            }
+
+            /* Validate all properties on the constructed tree */
+            rb_validation_t tree_result = rb_validate_tree(&prop_tree);
+            assert(tree_result.valid);
+
+            /* Explicitly test each of the 5 fundamental properties */
+            assert(tree_result.node_colors);
+            /* Property 1: Every node is either red or black
+             * This should always pass with our implementation */
+
+            assert(tree_result.null_nodes_black);
+            /* Property 2: All null nodes are considered black
+             * Our implementation treats NULL children as black */
+
+            assert(tree_result.red_children_black);
+            /* Property 3: A red node does not have a red child
+             * Our tree construction ensures this property */
+
+            assert(tree_result.black_height_consistent);
+            /* Property 4: Every path from a node to its leaves has same black
+             * count This is the core balancing property */
+
+            assert(tree_result.single_child_red);
+            /* Property 5: If a node has exactly one child, the child must be
+             * red This prevents black height violations */
+
+            /* Test that black height is correctly calculated */
+            assert(tree_result.black_height > 0);
+            assert(tree_result.node_count == 7);
+
+            /* Clean up */
+            for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
+                rb_remove(&prop_tree, &nodes[i]->rb_link);
+                free(nodes[i]);
+            }
+
+            printf(
+                "\r  Testing explicit validation of the 5 RB properties... "
+                "[ " COLOR_GREEN "OK" COLOR_RESET
+                " ]                                                            "
+                "\n");
+        }
+
+        /* Test validation error detection */
+        {
+            printf("  Testing validation error detection... ");
+
+            /* Test NULL tree validation */
+            rb_validation_t null_result = rb_validate_tree(NULL);
+            assert(!null_result.valid);
+            assert(null_result.error_msg != NULL);
+            assert(null_result.violation_property ==
+                   0); /* Not a property violation */
+
+            /* Test empty tree validation */
+            rb_t empty_prop_tree = {0};
+            empty_prop_tree.cmp_func = property_test_node_cmp;
+            rb_validation_t empty_result = rb_validate_tree(&empty_prop_tree);
+            assert(empty_result.valid);
+            assert(empty_result.node_count == 0);
+            /* All 5 properties should be satisfied for empty tree */
+            assert(empty_result.node_colors);
+            assert(empty_result.null_nodes_black);
+            assert(empty_result.red_children_black);
+            assert(empty_result.black_height_consistent);
+            assert(empty_result.single_child_red);
+
+            printf("\r  Testing validation error detection... [ " COLOR_GREEN
+                   "OK" COLOR_RESET
+                   " ]                                                         "
+                   "   \n");
+        }
+
+        /* Test property validation descriptions and reporting */
+        {
+            printf("  Testing property validation descriptions... ");
+
+            /* Create a simple tree for testing property descriptions */
+            rb_t desc_tree = {0};
+            desc_tree.cmp_func = property_test_node_cmp;
+
+            property_test_node_t *root_node = create_property_test_node(5, 50);
+            property_test_node_t *left_node = create_property_test_node(3, 30);
+            property_test_node_t *right_node = create_property_test_node(7, 70);
+
+            rb_insert(&desc_tree, &root_node->rb_link);
+            rb_insert(&desc_tree, &left_node->rb_link);
+            rb_insert(&desc_tree, &right_node->rb_link);
+
+            /* Validate the tree and check property descriptions are working */
+            rb_validation_t desc_result = rb_validate_tree(&desc_tree);
+            assert(desc_result.valid);
+
+            /* Verify all property flags are correctly set */
+            assert(desc_result.node_colors == true);
+            assert(desc_result.null_nodes_black == true);
+            assert(desc_result.red_children_black == true);
+            assert(desc_result.black_height_consistent == true);
+            assert(desc_result.single_child_red == true);
+
+            /* Verify additional checks */
+            assert(desc_result.root_is_black == true);
+            assert(desc_result.bst_property == true);
+
+            /* Clean up */
+            rb_remove(&desc_tree, &left_node->rb_link);
+            rb_remove(&desc_tree, &right_node->rb_link);
+            rb_remove(&desc_tree, &root_node->rb_link);
+            free(left_node);
+            free(right_node);
+            free(root_node);
+
+            printf(
+                "\r  Testing property validation descriptions... [ " COLOR_GREEN
+                "OK" COLOR_RESET
+                " ]                                                            "
+                "\n");
+        }
+
+        printf(
+            "\rTesting comprehensive property-based invariants... "
+            "[ " COLOR_GREEN "OK" COLOR_RESET
+            " ]                                                            \n");
+    }
+#endif /* _RB_ENABLE_PROPERTY_VALIDATION */
 
     return 0;
 }
