@@ -888,7 +888,8 @@ int main()
             const int NUM_STRESS_NODES = 50;
             const int NUM_STRESS_OPERATIONS = 200;
             property_test_node_t *stress_nodes[NUM_STRESS_NODES];
-            bool stress_inserted[NUM_STRESS_NODES] = {false};
+            bool stress_inserted[NUM_STRESS_NODES];
+            memset(stress_inserted, false, sizeof(stress_inserted));
 
             srand(42); /* Deterministic randomness for reproducible tests */
 
