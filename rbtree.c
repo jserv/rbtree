@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <stdio.h>
 
 #include "rbtree.h"
 
@@ -198,7 +199,21 @@ static void rotate(rb_node_t **stack, int stacksz)
         set_child(grandparent, get_side(grandparent, parent), child);
     }
 
-    /* Perform the rotation by updating child pointers */
+    /* Perform the rotation by updating child pointers
+     * Before rotation:
+     *     parent
+     *      /  \
+     *   child  ?
+     *    / \
+     *   a   b
+     *
+     * After rotation:
+     *     child
+     *      /  \
+     *     a   parent
+     *          / \
+     *         b   ?
+     */
     set_child(child, side, a);
     set_child(child, (side == RB_LEFT) ? RB_RIGHT : RB_LEFT, parent);
     set_child(parent, side, b);
@@ -342,6 +357,7 @@ static void fix_missing_black(rb_node_t **stack,
             rotate(stack, stacksz);
             set_red(parent);
             set_black(sib);
+
             stack[stacksz++] = n;
 
             parent = stack[stacksz - 2];
@@ -379,32 +395,42 @@ static void fix_missing_black(rb_node_t **stack,
         if (!(outer && is_red(outer))) {
             inner = get_child(sib, n_side);
 
-            stack[stacksz - 1] = sib;
-            stack[stacksz++] = inner;
-            rotate(stack, stacksz);
+            /* Standard double rotation: rotate sibling with its inner child
+             * first */
             set_red(sib);
             set_black(inner);
 
-            /* Update the stack to place N at the top and set 'sib' to the
-             * updated sibling.
+            /* Perform first rotation: sib with inner */
+            rb_side_t inner_side = n_side;
+            rb_side_t outer_side = (n_side == RB_LEFT) ? RB_RIGHT : RB_LEFT;
+
+            /* Update sibling's child relationships for first rotation */
+            rb_node_t *inner_child = get_child(inner, outer_side);
+            set_child(sib, inner_side, inner_child);
+            set_child(inner, outer_side, sib);
+
+            /* Update parent to point to inner (which is now in sib's position)
              */
-            sib = stack[stacksz - 2];
-            outer = get_child(sib, (n_side == RB_LEFT) ? RB_RIGHT : RB_LEFT);
-            stack[stacksz - 2] = n;
-            stacksz--;
+            set_child(parent, (n_side == RB_LEFT) ? RB_RIGHT : RB_LEFT, inner);
+
+            /* Update variables for second rotation */
+            sib = inner;
+            outer = get_child(sib, outer_side);
         }
 
-        /* Lastly, the sibling must have a red child in the far/outer position.
-         * Rotating 'sib' with the parent and recoloring will restore a valid
-         * tree.
-         */
+        /* Handle null_node replacement */
+        if (n == null_node) {
+            set_child(parent, n_side, NULL);
+        }
+
+        /* Final rotation with corrected references */
         set_color(sib, get_color(parent));
         set_black(parent);
         set_black(outer);
+
         stack[stacksz - 1] = sib;
         rotate(stack, stacksz);
-        if (n == null_node)
-            set_child(parent, n_side, NULL);
+
         return;
     }
 }
@@ -466,15 +492,18 @@ void rb_remove(rb_t *tree, rb_node_t *node)
         }
 
         if (loparent == node) {
+            /* node2 is a direct child of node */
             set_child(node, RB_LEFT, get_child(node2, RB_LEFT));
             set_child(node2, RB_LEFT, node);
         } else {
+            /* node2 is not a direct child - swap their positions */
             set_child(loparent, get_side(loparent, node2), node);
             tmp = get_child(node, RB_LEFT);
             set_child(node, RB_LEFT, get_child(node2, RB_LEFT));
             set_child(node2, RB_LEFT, tmp);
         }
 
+        /* Copy right child from node to node2 */
         set_child(node2, RB_RIGHT, get_child(node, RB_RIGHT));
         set_child(node, RB_RIGHT, NULL);
 
@@ -545,35 +574,11 @@ bool rb_contains(rb_t *tree, rb_node_t *node)
     rb_node_t *n = tree->root;
 
     while (n && (n != node))
-        n = get_child(n, tree->cmp_func(n, node));
+        n = get_child(n, tree->cmp_func(node, n) ? RB_LEFT : RB_RIGHT);
 
     return n == node;
 }
 
-/* Push the given node and its left-side descendants onto the stack in the
- * "foreach" structure, returning the last node, which is the next node to
- * iterate. By design, the node is always a right child or the root, so
- * "is_left" must be false.
- */
-static rb_node_t *stack_left_limb(rb_node_t *n, rb_foreach_t *f)
-{
-    if (f->top >= (int32_t) (_RB_MAX_TREE_DEPTH - 1))
-        return NULL;
-
-    f->top++;
-    f->stack[f->top] = n;
-    f->is_left[f->top] = false;
-
-    for (n = get_child(n, RB_LEFT); n; n = get_child(n, RB_LEFT)) {
-        if (f->top >= (int32_t) (_RB_MAX_TREE_DEPTH - 1))
-            break;
-        f->top++;
-        f->stack[f->top] = n;
-        f->is_left[f->top] = true;
-    }
-
-    return f->stack[f->top];
-}
 
 /* The "foreach" traversal uses a dynamic stack allocated with alloca(3) or
  * pre-allocated temporary space.
@@ -589,43 +594,64 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
     if (!tree->root)
         return NULL;
 
-    /* Initialization step: begin with the leftmost child of the root, setting
-     * up the stack as nodes are traversed.
-     */
+    /* Check if traversal is complete */
+    if (f->top == -2)
+        return NULL;
+
+    /* Initialize: push root and go down left as far as possible */
     if (f->top == -1) {
-        rb_node_t *result = stack_left_limb(tree->root, f);
-        if (!result)
-            return NULL;
-        return result;
+        rb_node_t *n = tree->root;
+        f->top = 0;
+
+        while (n) {
+            if (f->top >= (int32_t) _RB_MAX_TREE_DEPTH - 1) {
+                f->top = -2;
+                return NULL;
+            }
+
+            f->stack[f->top] = n;
+            f->is_left[f->top] = true; /* We went left to get here */
+            f->top++;
+            n = get_child(n, RB_LEFT);
+        }
     }
 
-    /* If the current node has a right child, traverse to the leftmost
-     * descendant of the right subtree.
-     */
-    rb_node_t *n = get_child(f->stack[f->top], RB_RIGHT);
-    if (n) {
-        rb_node_t *result = stack_left_limb(n, f);
-        if (!result)
-            return NULL;
-        return result;
-    }
-
-    /* If the current node is a left child, the next node to visit is its
-     * parent. The root node is pushed with 'is_left' set to false, ensuring
-     * this condition is satisfied even if the node has no parent.
-     */
-    if (f->is_left[f->top])
-        return f->stack[--f->top];
-
-    /* If the current node is a right child with no left subtree, its parent
-     * has already been visited. Move up the stack to find the nearest left
-     * child whose parent has not been visited, as it will be the next node.
-     */
-    while ((f->top > 0) && (f->is_left[f->top] == false))
+    /* Main traversal loop */
+    while (f->top > 0) {
         f->top--;
+        rb_node_t *n = f->stack[f->top];
+        bool went_left = f->is_left[f->top];
 
-    f->top--;
-    return (f->top >= 0) ? f->stack[f->top] : NULL;
+        if (went_left) {
+            /* Coming up from left subtree, visit this node */
+            f->is_left[f->top] = false; /* Mark that we've visited this node */
+            f->top++;                   /* Put it back on stack */
+
+            /* Go down right subtree if it exists */
+            rb_node_t *right = get_child(n, RB_RIGHT);
+            if (right) {
+                rb_node_t *current = right;
+                while (current) {
+                    if (f->top >= (int32_t) _RB_MAX_TREE_DEPTH - 1) {
+                        f->top = -2;
+                        return NULL;
+                    }
+
+                    f->stack[f->top] = current;
+                    f->is_left[f->top] = true;
+                    f->top++;
+                    current = get_child(current, RB_LEFT);
+                }
+            }
+
+            return n;
+        }
+        /* else: coming up from right subtree, continue up */
+    }
+
+    /* Stack is empty - traversal complete */
+    f->top = -2;
+    return NULL;
 }
 
 #if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE

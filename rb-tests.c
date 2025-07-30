@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "rbtree.h"
@@ -146,6 +147,17 @@ void check_tree(void)
         ni = node_index(n);
 
         if (last) {
+            if (!node_lessthan(last, n)) {
+                printf("ERROR: nodes out of order at position %d:\n", i);
+                printf("  last = %p (index %d)\n", last, node_index(last));
+                printf("  n    = %p (index %d)\n", n, node_index(n));
+                printf("  Full traversal order:\n");
+                for (int j = 0; j < nwalked; j++) {
+                    printf("    [%d] %p (index %d)\n", j, walked_nodes[j],
+                           node_index(walked_nodes[j]));
+                }
+                fflush(stdout);
+            }
             assert(node_lessthan(last, n));
         }
 
