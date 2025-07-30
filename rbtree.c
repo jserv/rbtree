@@ -40,7 +40,7 @@ static inline rb_node_t *get_child(rb_node_t *n, rb_side_t side)
      * child node is returned.
      */
     uintptr_t l = (uintptr_t) n->children[RB_LEFT];
-    l &= ~1UL;
+    l &= RB_PTR_MASK;
     return (rb_node_t *) l;
 }
 
@@ -66,7 +66,7 @@ static inline void set_child(rb_node_t *n, rb_side_t side, void *val)
     /* Preserve the LSB of the old pointer (e.g., color bit) and set the new
      * child.
      */
-    n->children[RB_LEFT] = (void *) (new | (old & 1UL));
+    n->children[RB_LEFT] = (void *) (new | (old & RB_COLOR_MASK));
 }
 
 /* The color information is stored in the LSB of the left child pointer (i.e.,
@@ -80,7 +80,7 @@ static inline void set_child(rb_node_t *n, rb_side_t side, void *val)
  */
 static inline rb_color_t get_color(rb_node_t *n)
 {
-    return ((uintptr_t) n->children[0]) & 1UL ? RB_BLACK : RB_RED;
+    return ((uintptr_t) n->children[0]) & RB_COLOR_MASK ? RB_BLACK : RB_RED;
 }
 
 static inline bool is_black(rb_node_t *n)
@@ -96,7 +96,7 @@ static inline bool is_red(rb_node_t *n)
 static inline void set_color(rb_node_t *n, rb_color_t color)
 {
     uintptr_t *p = (void *) &n->children[0];
-    *p = (*p & ~1UL) | (uint8_t) color;
+    *p = (*p & RB_PTR_MASK) | (uint8_t) color;
 }
 
 static inline void set_black(rb_node_t *n)
@@ -616,7 +616,7 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
         return NULL;
 
     /* Check if traversal is complete */
-    if (f->top == -2)
+    if (f->top == RB_ITER_DONE)
         return NULL;
 
     /* Get stack pointer from buffer */
@@ -625,13 +625,13 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
     uint8_t *flags = _RB_FOREACH_FLAGS(f);
 
     /* Initialize: push root and go down left as far as possible */
-    if (f->top == -1) {
+    if (f->top == RB_ITER_UNINIT) {
         rb_node_t *n = tree->root;
         f->top = 0;
 
         while (n) {
             if (f->top >= (int32_t) _RB_MAX_TREE_DEPTH - 1) {
-                f->top = -2;
+                f->top = RB_ITER_DONE;
                 return NULL;
             }
 
@@ -661,7 +661,7 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
                 rb_node_t *current = right;
                 while (current) {
                     if (f->top >= (int32_t) _RB_MAX_TREE_DEPTH - 1) {
-                        f->top = -2;
+                        f->top = RB_ITER_DONE;
                         return NULL;
                     }
 
@@ -678,7 +678,7 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f)
     }
 
     /* Stack is empty - traversal complete */
-    f->top = -2;
+    f->top = RB_ITER_DONE;
     return NULL;
 }
 

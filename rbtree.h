@@ -74,6 +74,12 @@
 
 typedef enum { RB_LEFT = 0, RB_RIGHT = 1 } rb_side_t;
 
+/* Magic number */
+#define RB_COLOR_MASK 1UL
+#define RB_PTR_MASK (~RB_COLOR_MASK)
+#define RB_ITER_UNINIT (-1)
+#define RB_ITER_DONE (-2)
+
 /* red-black tree node.
  *
  * Red-black trees often use an additional "parent" pointer for upward traversal
@@ -354,11 +360,13 @@ bool rb_cached_contains(rb_cached_t *tree, rb_node_t *node);
  *
  * Fields:
  * @buffer: Single allocation containing both node stack and direction flags
- * @top:    Current stack position (-1=uninitialized, -2=done, >=0=active)
+ * @top:    Current stack position (RB_ITER_UNINIT=uninitialized,
+ *          RB_ITER_DONE=done, >=0=active)
  */
 typedef struct {
     void *buffer; /**< Single allocation for both stack and direction flags */
-    int32_t top;  /**< Current position in the stack (-1 = uninit, -2 = done) */
+    int32_t top;  /**< Current position in the stack (RB_ITER_UNINIT = uninit,
+                     RB_ITER_DONE = done) */
 } rb_foreach_t;
 
 /* Helper macros to access the optimized buffer layout */
@@ -384,13 +392,13 @@ typedef struct {
 #define _RB_FOREACH_INIT(tree, node)               \
     {                                              \
         .buffer = alloca(_RB_FOREACH_BUFFER_SIZE), \
-        .top = -1,                                 \
+        .top = RB_ITER_UNINIT,                     \
     }
 #else
 #define _RB_FOREACH_INIT(tree, node)   \
     {                                  \
         .buffer = (tree)->iter_buffer, \
-        .top = -1,                     \
+        .top = RB_ITER_UNINIT,         \
     }
 #endif
 
