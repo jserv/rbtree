@@ -79,6 +79,13 @@ typedef char __rbtree_alignment_check[((_Alignof(void *) >= 2) ? 1 : -1)];
 #define _RB_ENABLE_SAFETY_CHECKS 1
 #endif
 
+/* Enable batch operations for efficient bulk insertions.
+ * This adds batch API support with optimized tree construction for empty trees.
+ */
+#ifndef _RB_ENABLE_BATCH_OPS
+#define _RB_ENABLE_BATCH_OPS 1
+#endif
+
 #if _RB_DISABLE_ALLOCA == 0
 #if defined(__GNUC__) || defined(__clang__)
 #undef alloca
@@ -565,5 +572,87 @@ rb_node_t *__rb_foreach_next(rb_t *tree, rb_foreach_t *f);
  */
 rb_node_t *__rb_cached_foreach_next(rb_cached_t *tree, rb_foreach_t *f);
 #endif
+
+#if _RB_ENABLE_BATCH_OPS
+/* Batch operation support for efficient bulk insertions.
+ *
+ * Batch operations allow collecting multiple nodes before inserting them
+ * into the tree, providing optimization opportunities for bulk operations.
+ * When inserting into an empty tree, nodes are sorted and a balanced tree
+ * is constructed in O(n) time after O(n log n) sorting.
+ */
+
+/**
+ * Batch operation context for collecting nodes before bulk insertion.
+ *
+ * @nodes:     Dynamic array of node pointers to be inserted
+ * @count:     Current number of nodes in the batch
+ * @capacity:  Allocated capacity of the nodes array
+ * @cmp_func:  Comparison function (copied from tree during commit)
+ */
+typedef struct {
+    rb_node_t **nodes; /**< Buffer of nodes to be inserted */
+    size_t count;      /**< Current number of nodes in buffer */
+    size_t capacity;   /**< Allocated capacity of buffer */
+    rb_cmp_t cmp_func; /**< Comparison function for sorting */
+} rb_batch_t;
+
+/**
+ * Initialize a batch operation context.
+ * @batch: Pointer to the batch context to initialize
+ * @initial_capacity: Initial buffer capacity (0 for default of 64)
+ *
+ * Returns: 0 on success, -1 on allocation failure
+ *
+ * The batch buffer will grow automatically as nodes are added.
+ * Call rb_batch_destroy() when done to free resources.
+ */
+int rb_batch_init(rb_batch_t *batch, size_t initial_capacity);
+
+/**
+ * Free resources associated with a batch context.
+ * @batch: Pointer to the batch context
+ *
+ * This only frees the internal buffer, not the nodes themselves.
+ * The nodes remain valid for use in the tree.
+ */
+void rb_batch_destroy(rb_batch_t *batch);
+
+/**
+ * Add a node to the batch buffer.
+ * @batch: Pointer to the batch context
+ * @node: Node to add to the batch (must be uninitialized)
+ *
+ * Returns: 0 on success, -1 on allocation failure
+ *
+ * The buffer grows automatically if needed. Nodes are not
+ * modified until rb_batch_commit() is called.
+ */
+int rb_batch_add(rb_batch_t *batch, rb_node_t *node);
+
+/**
+ * Commit all batched nodes to a red-black tree.
+ * @tree: Target red-black tree
+ * @batch: Batch context containing nodes to insert
+ *
+ * For empty trees: Sorts nodes and builds a balanced tree in O(n) time.
+ * For non-empty trees: Falls back to individual insertions.
+ *
+ * After commit, the batch is automatically cleared and can be reused.
+ * The tree's comparison function is used for sorting and insertion.
+ */
+void rb_batch_commit(rb_t *tree, rb_batch_t *batch);
+
+#if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
+/**
+ * Commit all batched nodes to a cached red-black tree.
+ * @tree: Target cached red-black tree
+ * @batch: Batch context containing nodes to insert
+ *
+ * Same as rb_batch_commit() but updates cached min/max pointers.
+ */
+void rb_cached_batch_commit(rb_cached_t *tree, rb_batch_t *batch);
+#endif
+#endif /* _RB_ENABLE_BATCH_OPS */
 
 #endif /* _RBTREE_H_ */

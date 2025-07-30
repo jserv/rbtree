@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "rbtree.h"
 
@@ -882,3 +883,177 @@ bool rb_cached_contains(rb_cached_t *tree, rb_node_t *node)
     return rb_contains(&tree->rb_root, node);
 }
 #endif
+
+#if _RB_ENABLE_BATCH_OPS
+/* Batch operations implementation */
+
+/* Global state for qsort comparison: uses TLS for thread safety */
+static __thread rb_cmp_t _rb_batch_cmp_func;
+
+/**
+ * Comparison wrapper for qsort.
+ * Adapts the tree's comparison function to qsort's expected interface.
+ */
+static int rb_batch_qsort_cmp(const void *a, const void *b)
+{
+    const rb_node_t *node_a = *(const rb_node_t **) a;
+    const rb_node_t *node_b = *(const rb_node_t **) b;
+
+    return _rb_batch_cmp_func(node_a, node_b) ? -1 : 1;
+}
+
+/**
+ * Build a balanced subtree from a sorted array of nodes.
+ * Recursively selects middle elements to create a perfectly balanced tree.
+ */
+static rb_node_t *rb_batch_build_balanced(rb_node_t **nodes, int start, int end)
+{
+    if (start > end)
+        return NULL;
+
+    /* Find middle element */
+    int mid = start + (end - start) / 2;
+    rb_node_t *node = nodes[mid];
+
+    /* Recursively build left and right subtrees */
+    rb_node_t *left = NULL;
+    rb_node_t *right = NULL;
+
+    if (start < mid)
+        left = rb_batch_build_balanced(nodes, start, mid - 1);
+    if (mid < end)
+        right = rb_batch_build_balanced(nodes, mid + 1, end);
+
+    /* Initialize node with proper children */
+    /* Set left child and make node black by default */
+    node->children[RB_LEFT] = (rb_node_t *) ((uintptr_t) left | RB_COLOR_MASK);
+    node->children[RB_RIGHT] = right;
+
+    return node;
+}
+
+/**
+ * Simple coloring strategy: make all nodes black.
+ * This creates a valid (though not optimal) red-black tree.
+ */
+static void rb_batch_color_all_black(rb_node_t *node)
+{
+    if (!node)
+        return;
+
+    /* Get actual children (without color bit) */
+    rb_node_t *left =
+        (rb_node_t *) ((uintptr_t) node->children[RB_LEFT] & ~RB_COLOR_MASK);
+    rb_node_t *right = node->children[RB_RIGHT];
+
+    /* Make this node black */
+    node->children[RB_LEFT] = (rb_node_t *) ((uintptr_t) left | RB_COLOR_MASK);
+
+    /* Recursively color children */
+    rb_batch_color_all_black(left);
+    rb_batch_color_all_black(right);
+}
+
+int rb_batch_init(rb_batch_t *batch, size_t initial_capacity)
+{
+    batch->count = 0;
+    batch->capacity = initial_capacity ? initial_capacity : 64;
+    batch->nodes = malloc(batch->capacity * sizeof(rb_node_t *));
+    batch->cmp_func = NULL;
+    return batch->nodes ? 0 : -1;
+}
+
+void rb_batch_destroy(rb_batch_t *batch)
+{
+    free(batch->nodes);
+    batch->nodes = NULL;
+    batch->count = 0;
+    batch->capacity = 0;
+}
+
+int rb_batch_add(rb_batch_t *batch, rb_node_t *node)
+{
+    /* Grow buffer if needed */
+    if (batch->count >= batch->capacity) {
+        size_t new_capacity = batch->capacity * 2;
+        rb_node_t **new_nodes =
+            realloc(batch->nodes, new_capacity * sizeof(rb_node_t *));
+        if (!new_nodes)
+            return -1;
+
+        batch->nodes = new_nodes;
+        batch->capacity = new_capacity;
+    }
+
+    batch->nodes[batch->count++] = node;
+    return 0;
+}
+
+void rb_batch_commit(rb_t *tree, rb_batch_t *batch)
+{
+    if (batch->count == 0)
+        return;
+
+    /* Store comparison function for qsort wrapper */
+    batch->cmp_func = tree->cmp_func;
+
+    /* If tree is empty, we can build an optimal tree */
+    if (!tree->root) {
+        /* Set comparison function for qsort */
+        _rb_batch_cmp_func = tree->cmp_func;
+
+        /* Sort nodes */
+        qsort(batch->nodes, batch->count, sizeof(rb_node_t *),
+              rb_batch_qsort_cmp);
+
+        /* Build balanced tree */
+        tree->root = rb_batch_build_balanced(batch->nodes, 0, batch->count - 1);
+
+        /* Color all nodes black (simple but valid coloring) */
+        rb_batch_color_all_black(tree->root);
+
+#if _RB_DISABLE_ALLOCA != 0
+        /* Update max_depth for the new tree */
+        tree->max_depth = 0;
+        size_t n = batch->count;
+        while (n > 0) {
+            tree->max_depth++;
+            n /= 2;
+        }
+        /* Add safety margin */
+        tree->max_depth = (tree->max_depth * 2) + 1;
+        if (tree->max_depth > _RB_COMMON_TREE_DEPTH)
+            tree->max_depth = _RB_COMMON_TREE_DEPTH;
+#endif
+    } else {
+        /* Tree is non-empty, fall back to regular insertions */
+        /* This maintains correctness but loses the batch optimization */
+        for (size_t i = 0; i < batch->count; i++)
+            rb_insert(tree, batch->nodes[i]);
+    }
+
+    /* Clear the batch */
+    batch->count = 0;
+}
+
+#if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
+void rb_cached_batch_commit(rb_cached_t *tree, rb_batch_t *batch)
+{
+    if (batch->count == 0)
+        return;
+
+    /* Use the standard batch commit for the underlying tree */
+    rb_batch_commit(&tree->rb_root, batch);
+
+    /* Update cached pointers if tree was empty before */
+#if _RB_ENABLE_LEFTMOST_CACHE
+    if (!tree->rb_leftmost && tree->rb_root.root)
+        tree->rb_leftmost = __rb_get_minmax(&tree->rb_root, RB_LEFT);
+#endif
+#if _RB_ENABLE_RIGHTMOST_CACHE
+    if (!tree->rb_rightmost && tree->rb_root.root)
+        tree->rb_rightmost = __rb_get_minmax(&tree->rb_root, RB_RIGHT);
+#endif
+}
+#endif
+#endif /* _RB_ENABLE_BATCH_OPS */

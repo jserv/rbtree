@@ -522,5 +522,120 @@ int main()
     }
 #endif
 
+#if _RB_ENABLE_BATCH_OPS
+    /* Test batch operations */
+    {
+        printf("Batch operations test...");
+
+        /* Test basic batch operations */
+        rb_batch_t batch;
+        assert(rb_batch_init(&batch, 0) == 0);
+
+        /* Test batch insertion into empty tree */
+        rb_t batch_tree = {0};
+        batch_tree.cmp_func = node_lessthan;
+
+        /* Add nodes to batch */
+        const int batch_size = 100;
+        for (int i = 0; i < batch_size; i++)
+            assert(rb_batch_add(&batch, &nodes[i]) == 0);
+
+        /* Commit batch to empty tree */
+        rb_batch_commit(&batch_tree, &batch);
+
+        /* Verify tree structure */
+        assert(batch_tree.root != NULL);
+
+        /* Count nodes using traversal */
+        int node_count = 0;
+        rb_node_t *n;
+        RB_FOREACH (&batch_tree, n) {
+            node_count++;
+        }
+        assert(node_count == batch_size);
+
+        /* Verify all nodes are present */
+        for (int i = 0; i < batch_size; i++)
+            assert(rb_contains(&batch_tree, &nodes[i]));
+
+        /* Test batch insertion into non-empty tree */
+        rb_t tree2 = {0};
+        tree2.cmp_func = node_lessthan;
+
+        /* Insert some initial nodes */
+        for (int i = 0; i < 10; i++)
+            rb_insert(&tree2, &nodes[i * 10]);
+
+        /* Clear and reuse batch */
+        batch.count = 0;
+
+        /* Add different nodes to batch */
+        for (int i = 100; i < 150; i++)
+            assert(rb_batch_add(&batch, &nodes[i]) == 0);
+
+        /* Commit to non-empty tree (should fall back to regular insertions) */
+        rb_batch_commit(&tree2, &batch);
+
+        /* Verify all nodes are present */
+        node_count = 0;
+        RB_FOREACH (&tree2, n) {
+            node_count++;
+        }
+        assert(node_count == 60); /* 10 initial + 50 batch */
+
+#if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
+        /* Test batch with cached tree */
+        rb_cached_t cached_batch_tree;
+        rb_cached_init(&cached_batch_tree, node_lessthan);
+
+        /* Clear batch */
+        batch.count = 0;
+
+        /* Add nodes to batch */
+        for (int i = 150; i < 200; i++)
+            assert(rb_batch_add(&batch, &nodes[i]) == 0);
+
+        /* Commit to cached tree */
+        rb_cached_batch_commit(&cached_batch_tree, &batch);
+
+        /* Verify tree and cache */
+        assert(cached_batch_tree.rb_root.root != NULL);
+        node_count = 0;
+        rb_node_t *cn;
+        RB_CACHED_FOREACH (&cached_batch_tree, cn) {
+            node_count++;
+        }
+        assert(node_count == 50);
+
+#if _RB_ENABLE_LEFTMOST_CACHE
+        rb_node_t *min = rb_cached_get_min(&cached_batch_tree);
+        assert(min == &nodes[150]);
+#endif
+
+#if _RB_ENABLE_RIGHTMOST_CACHE
+        rb_node_t *max = rb_cached_get_max(&cached_batch_tree);
+        assert(max == &nodes[199]);
+#endif
+#endif /* cached tree */
+
+        /* Test batch buffer growth */
+        rb_batch_t small_batch;
+        assert(rb_batch_init(&small_batch, 2) == 0); /* Start small */
+
+        /* Add many nodes to force growth */
+        for (int i = 200; i < 250; i++)
+            assert(rb_batch_add(&small_batch, &nodes[i]) == 0);
+
+        assert(small_batch.count == 50);
+        assert(small_batch.capacity >= 50);
+
+        /* Cleanup */
+        rb_batch_destroy(&batch);
+        rb_batch_destroy(&small_batch);
+
+        printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+    }
+#endif /* _RB_ENABLE_BATCH_OPS */
+
     return 0;
 }
