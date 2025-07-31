@@ -1,5 +1,7 @@
 #include <assert.h>
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -300,9 +302,8 @@ void check_tree(void)
 
     assert(ni == nwalked);
 
-    if (test_rbtree.root) {
+    if (test_rbtree.root)
         check_rb();
-    }
 
     /* Additional property-based validation */
     validate_tree_properties(nwalked);
@@ -337,6 +338,89 @@ void test_tree(int size)
         if (!small_tree)
             check_tree();
     }
+}
+
+/* Comprehensive Randomized Testing Support Functions */
+
+/* Test configuration */
+#define TEST_NODES 25       /* Number of nodes per iteration */
+#define TEST_ITERATIONS 100 /* Iterations for random tests */
+#define TEST_SEED 42        /* Fixed seed for reproducible tests */
+
+/* Magic number for corruption detection */
+#define NODE_MAGIC 0x9823af7e
+
+/* Fast 32-bit RNG - rapidhash variant
+ * Reference: github.com/Nicoshev/rapidhash
+ */
+
+/**
+ * Advance state and return a new 32-bit pseudo-random value
+ *
+ * @state : Pointer to RNG state (modified)
+ * Return New pseudo-random 32-bit value
+ */
+static inline uint32_t rand_u32(uint32_t *state)
+{
+    *state += 0xe120fc15u;
+    uint64_t tmp = (uint64_t) (*state) * 0x4a39b70d;
+    uint32_t mix = (uint32_t) ((tmp >> 32) ^ tmp);
+    tmp = (uint64_t) mix * 0x12fad5c9;
+    return (uint32_t) ((tmp >> 32) ^ tmp);
+}
+
+/* Test node structure with corruption detection and metadata */
+typedef struct test_node {
+    uint32_t magic;    /* Corruption detection */
+    rb_node_t rb_link; /* Red-black tree linkage */
+    uint64_t key;      /* Ordering key */
+    bool removed;      /* Track removal status */
+} test_node_t;
+
+/* Comparison function for test nodes */
+static bool test_node_cmp(const rb_node_t *a, const rb_node_t *b)
+{
+    if (!a || !b)
+        return false;
+
+    const test_node_t *node_a = container_of(a, test_node_t, rb_link);
+    const test_node_t *node_b = container_of(b, test_node_t, rb_link);
+
+    /* Validate magic numbers */
+    assert(node_a->magic == NODE_MAGIC);
+    assert(node_b->magic == NODE_MAGIC);
+
+    if (node_a->key != node_b->key)
+        return node_a->key < node_b->key;
+
+    /* Handle duplicates by pointer comparison for deterministic ordering */
+    return (uintptr_t) node_a < (uintptr_t) node_b;
+}
+
+/* Initialize test node with magic number and metadata */
+static void init_test_node(test_node_t *node, uint64_t key)
+{
+    memset(node, 0, sizeof(*node));
+    node->magic = NODE_MAGIC;
+    node->key = key;
+    node->removed = false;
+    node->rb_link.children[0] = NULL;
+    node->rb_link.children[1] = NULL;
+}
+
+/* Count nodes in tree using traversal */
+static size_t count_tree_nodes(rb_t *tree)
+{
+    size_t count = 0;
+    rb_node_t *node;
+
+    RB_FOREACH (tree, node) {
+        test_node_t *test_node = container_of(node, test_node_t, rb_link);
+        assert(test_node->magic == NODE_MAGIC);
+        count++;
+    }
+
+    return count;
 }
 
 int main()
@@ -1117,6 +1201,277 @@ int main()
             " ]                                                            \n");
     }
 #endif /* _RB_ENABLE_PROPERTY_VALIDATION */
+
+    /* Comprehensive Randomized Testing */
+    {
+        printf("Testing comprehensive randomized patterns...\n");
+
+        /* Test statistics */
+        struct {
+            size_t nodes_inserted;
+            size_t nodes_removed;
+            size_t iterator_operations;
+            size_t tree_operations;
+        } test_stats = {0};
+
+        /* Test 1: Sequential insertion and deletion */
+        {
+            printf("  Testing sequential operations... ");
+            fflush(stdout);
+
+            rb_t tree;
+            memset(&tree, 0, sizeof(tree));
+            tree.cmp_func = test_node_cmp;
+
+            test_node_t nodes[TEST_NODES];
+
+            /* Sequential insertion (0, 1, 2, ..., n-1) */
+            for (size_t i = 0; i < TEST_NODES; i++) {
+                init_test_node(&nodes[i], i);
+                rb_insert(&tree, &nodes[i].rb_link);
+                test_stats.nodes_inserted++;
+            }
+
+            /* Validate final tree */
+            size_t count = count_tree_nodes(&tree);
+            assert(count == TEST_NODES);
+
+            /* Sequential deletion (0, 1, 2, ..., n-1) */
+            for (size_t i = 0; i < TEST_NODES; i++) {
+                assert(rb_contains(&tree, &nodes[i].rb_link));
+                rb_remove(&tree, &nodes[i].rb_link);
+                nodes[i].removed = true;
+                test_stats.nodes_removed++;
+
+                /* Validate remaining count */
+                count = count_tree_nodes(&tree);
+                assert(count == TEST_NODES - i - 1);
+            }
+
+            assert(tree.root == NULL);
+            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+        }
+
+        /* Test 2: Reverse order operations */
+        {
+            printf("  Testing reverse order operations... ");
+            fflush(stdout);
+
+            rb_t tree;
+            memset(&tree, 0, sizeof(tree));
+            tree.cmp_func = test_node_cmp;
+
+            test_node_t nodes[TEST_NODES];
+
+            /* Reverse insertion (n-1, n-2, ..., 1, 0) */
+            for (size_t i = 0; i < TEST_NODES; i++) {
+                size_t key = TEST_NODES - 1 - i;
+                init_test_node(&nodes[i], key);
+                rb_insert(&tree, &nodes[i].rb_link);
+                test_stats.nodes_inserted++;
+            }
+
+            /* Validate tree */
+            size_t count = count_tree_nodes(&tree);
+            assert(count == TEST_NODES);
+
+            /* Reverse deletion (n-1, n-2, ..., 1, 0) */
+            for (size_t i = 0; i < TEST_NODES; i++) {
+                assert(rb_contains(&tree, &nodes[i].rb_link));
+                rb_remove(&tree, &nodes[i].rb_link);
+                nodes[i].removed = true;
+                test_stats.nodes_removed++;
+
+                count = count_tree_nodes(&tree);
+                assert(count == TEST_NODES - i - 1);
+            }
+
+            assert(tree.root == NULL);
+            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+        }
+
+        /* Test 3: Random operations with various removal patterns */
+        {
+            printf("  Testing random operations (%d iterations)... ",
+                   TEST_ITERATIONS);
+            fflush(stdout);
+
+            /* Initialize RNG with fixed seed for reproducible tests */
+            uint32_t rng_state = TEST_SEED;
+
+            for (size_t iteration = 0; iteration < TEST_ITERATIONS;
+                 iteration++) {
+                rb_t tree;
+                memset(&tree, 0, sizeof(tree));
+                tree.cmp_func = test_node_cmp;
+
+                test_node_t nodes[TEST_NODES];
+                uint64_t keys[TEST_NODES];
+
+                /* Generate random keys */
+                for (size_t i = 0; i < TEST_NODES; i++)
+                    keys[i] = rand_u32(&rng_state) % (TEST_NODES * 2);
+
+                /* Random insertion */
+                for (size_t i = 0; i < TEST_NODES; i++) {
+                    init_test_node(&nodes[i], keys[i]);
+                    rb_insert(&tree, &nodes[i].rb_link);
+                    test_stats.nodes_inserted++;
+                }
+
+                /* Validate final tree */
+                size_t count = count_tree_nodes(&tree);
+                assert(count == TEST_NODES);
+
+                /* Various removal patterns based on iteration */
+                switch (iteration % 3) {
+                case 0: /* Forward removal */
+                    for (size_t i = 0; i < TEST_NODES; i++) {
+                        rb_remove(&tree, &nodes[i].rb_link);
+                        nodes[i].removed = true;
+                        test_stats.nodes_removed++;
+                    }
+                    break;
+
+                case 1: /* Backward removal */
+                    for (size_t i = TEST_NODES; i > 0; i--) {
+                        rb_remove(&tree, &nodes[i - 1].rb_link);
+                        nodes[i - 1].removed = true;
+                        test_stats.nodes_removed++;
+                    }
+                    break;
+
+                case 2: /* Random removal */
+                    for (size_t remaining = TEST_NODES; remaining > 0;
+                         remaining--) {
+                        size_t idx = rand_u32(&rng_state) % remaining;
+
+                        /* Find the idx-th non-removed node */
+                        size_t current = 0;
+                        for (size_t j = 0; j < TEST_NODES; j++) {
+                            if (!nodes[j].removed) {
+                                if (current == idx) {
+                                    rb_remove(&tree, &nodes[j].rb_link);
+                                    nodes[j].removed = true;
+                                    test_stats.nodes_removed++;
+                                    break;
+                                }
+                                current++;
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                assert(tree.root == NULL);
+                test_stats.tree_operations++;
+
+                /* Reset removed flags for next iteration */
+                for (size_t i = 0; i < TEST_NODES; i++)
+                    nodes[i].removed = false;
+            }
+
+            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+        }
+
+        /* Test 4: Iterator robustness */
+        {
+            printf("  Testing iterator robustness... ");
+            fflush(stdout);
+
+            uint32_t rng_state = TEST_SEED;
+
+            rb_t tree;
+            memset(&tree, 0, sizeof(tree));
+            tree.cmp_func = test_node_cmp;
+
+            test_node_t nodes[TEST_NODES];
+
+            /* Insert nodes with random keys */
+            for (size_t i = 0; i < TEST_NODES; i++) {
+                init_test_node(&nodes[i],
+                               rand_u32(&rng_state) % (TEST_NODES * 2));
+                rb_insert(&tree, &nodes[i].rb_link);
+                test_stats.nodes_inserted++;
+            }
+
+            /* Test 1: Verify complete traversal */
+            size_t visit_count = 0;
+            rb_node_t *node;
+
+            RB_FOREACH (&tree, node) {
+                test_node_t *test_node =
+                    container_of(node, test_node_t, rb_link);
+                assert(test_node->magic == NODE_MAGIC);
+                visit_count++;
+            }
+
+            assert(visit_count == TEST_NODES);
+            test_stats.iterator_operations++;
+
+            /* Test 2: Verify ordering consistency */
+            test_node_t *prev = NULL;
+            RB_FOREACH (&tree, node) {
+                test_node_t *current = container_of(node, test_node_t, rb_link);
+
+                if (prev != NULL) {
+                    /* Verify strict ordering */
+                    assert(test_node_cmp(&prev->rb_link, &current->rb_link) ||
+                           prev->key == current->key);
+                }
+
+                prev = current;
+            }
+
+            test_stats.iterator_operations++;
+
+            /* Test 3: Multiple concurrent traversals should be consistent */
+            for (size_t test_round = 0; test_round < 5; test_round++) {
+                size_t count1 = 0, count2 = 0;
+
+                RB_FOREACH (&tree, node) {
+                    count1++;
+                }
+
+                RB_FOREACH (&tree, node) {
+                    count2++;
+                }
+
+                assert(count1 == count2);
+                assert(count1 == count_tree_nodes(&tree));
+            }
+
+            test_stats.iterator_operations += 10;
+
+            /* Clean up */
+            for (size_t i = 0; i < TEST_NODES; i++) {
+                rb_remove(&tree, &nodes[i].rb_link);
+                test_stats.nodes_removed++;
+            }
+
+            assert(tree.root == NULL);
+            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+        }
+
+        /* Print test statistics */
+        printf("  Comprehensive test statistics:\n");
+        printf("    - Nodes inserted:      %zu\n", test_stats.nodes_inserted);
+        printf("    - Nodes removed:       %zu\n", test_stats.nodes_removed);
+        printf("    - Iterator operations: %zu\n",
+               test_stats.iterator_operations);
+        printf("    - Tree operations:     %zu\n", test_stats.tree_operations);
+        printf("    - Total operations:    %zu\n",
+               test_stats.nodes_inserted + test_stats.nodes_removed +
+                   test_stats.iterator_operations);
+
+        printf("Testing comprehensive randomized patterns... [ " COLOR_GREEN
+               "OK" COLOR_RESET " ]\n");
+
+#undef TEST_NODES
+#undef TEST_ITERATIONS
+#undef TEST_SEED
+#undef NODE_MAGIC
+    }
 
     return 0;
 }
