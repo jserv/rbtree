@@ -22,6 +22,21 @@
 #define COLOR_GREEN "\033[32m"
 #define COLOR_RESET "\033[0m"
 
+/* Test message handling macros */
+#define TEST_OK_MSG "[ " COLOR_GREEN "OK" COLOR_RESET " ]"
+#define print_test_ok() printf(TEST_OK_MSG "\n")
+#define print_test_start(msg)          \
+    do {                               \
+        printf("Testing " msg "... "); \
+        fflush(stdout);                \
+    } while (0)
+#define print_test_progress(msg) \
+    do {                         \
+        printf("\r" msg);        \
+        fflush(stdout);          \
+    } while (0)
+#define print_test_complete(msg) printf("\r" msg "... " TEST_OK_MSG "\n")
+
 static rb_t test_rbtree;
 
 static rb_node_t nodes[MAX_NODES];
@@ -216,9 +231,8 @@ static void assert_property_tree_valid(rb_t *tree, const char *operation)
     assert(result.single_child_red &&
            "Property 5: Single children must be red");
 
-    printf(
-        "  ✓ All 5 RB properties validated after %s (nodes: %zu, black_height: %d)\n",operation, result.node_count, result.black_height);
-    fflush(stdout);
+    printf("  ✓ Validated after %s (nodes: %zu, black_height: %d)\n", operation,
+           result.node_count, result.black_height);
 }
 #else
 #define assert_property_tree_valid(tree, operation) ((void) 0)
@@ -237,8 +251,8 @@ static void assert_property_cached_tree_valid(rb_cached_t *tree,
         rb_print_validation_report(&result);
         assert(0 && "Property-based cached tree validation failed");
     }
-    printf("  ✓ Property cached validation passed after %s (nodes: %zu,black_height: %d)\n", operation, result.node_count, result.black_height);
-    fflush(stdout);
+    printf("  ✓ Passed after %s (nodes: %zu,black_height: %d)\n", operation,
+           result.node_count, result.black_height);
 }
 #else
 #define assert_property_cached_tree_valid(tree, operation) ((void) 0)
@@ -436,13 +450,12 @@ int main()
 
             test_tree(size);
         } while (size < MAX_NODES);
-        printf("\rTesting basic red-black tree operations... [ " COLOR_GREEN
-               "OK" COLOR_RESET " ]\n");
+        print_test_complete("Testing basic red-black tree operations");
     }
 
     /* Test removing a node with abnormal color */
     {
-        printf("Testing edge case: removing node with abnormal color... ");
+        print_test_start("edge case: removing node with abnormal color");
         rb_node_t temp = {0};
 
         /* Initialize a tree and insert it */
@@ -460,7 +473,7 @@ int main()
         /* Check if tree's max and min node are expected */
         assert(rb_get_min(&test_rbtree) == &nodes[0] && "the tree is invalid");
         assert(rb_get_max(&test_rbtree) == &nodes[7] && "the tree is invalid");
-        printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+        print_test_ok();
     }
 
     /* Cached tree tests */
@@ -472,7 +485,7 @@ int main()
 
         /* Test basic cached operations */
         {
-            printf("Testing cached tree basic operations... ");
+            print_test_start("cached tree basic operations");
 
             rb_cached_init(&cached_tree, node_lessthan);
 
@@ -523,12 +536,12 @@ int main()
             assert(rb_cached_get_min(&cached_tree) == NULL);
             assert(rb_cached_get_max(&cached_tree) == NULL);
 
-            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+            print_test_ok();
         }
 
         /* Test cached vs standard consistency */
         {
-            printf("Testing cached vs standard tree consistency... ");
+            print_test_start("cached vs standard tree consistency");
 
             rb_t standard_tree = {.root = NULL,
                                   .cmp_func = node_lessthan
@@ -572,12 +585,12 @@ int main()
             assert(std_count == cached_count);
             assert(std_count == 20);
 
-            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+            print_test_ok();
         }
 
         /* Test cache consistency during rebalancing */
         {
-            printf("Testing cache consistency during rebalancing... ");
+            print_test_start("cache consistency during rebalancing");
 
             rb_cached_init(&cached_tree, node_lessthan);
 
@@ -613,12 +626,12 @@ int main()
             for (int i = 0; i < 25; i++)
                 rb_cached_remove(&cached_tree, &cached_nodes[i]);
 
-            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+            print_test_ok();
         }
 
         /* Test rb_cached_contains() optimization */
         {
-            printf("Testing rb_cached_contains() optimization... ");
+            print_test_start("rb_cached_contains() optimization");
 
             rb_cached_init(&cached_tree, node_lessthan);
 
@@ -717,7 +730,7 @@ int main()
             assert(rb_cached_empty(&cached_tree));
             assert(!rb_cached_contains(&cached_tree, &cached_nodes[0]));
 
-            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+            print_test_ok();
         }
     }
 #endif
@@ -725,7 +738,7 @@ int main()
 #if _RB_ENABLE_BATCH_OPS
     /* Test batch operations */
     {
-        printf("Testing batch operations... ");
+        print_test_start("batch operations");
 
         /* Test basic batch operations */
         rb_batch_t batch;
@@ -833,13 +846,13 @@ int main()
         rb_batch_destroy(&batch);
         rb_batch_destroy(&small_batch);
 
-        printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+        print_test_ok();
     }
 #endif /* _RB_ENABLE_BATCH_OPS */
 
 #if _RB_ENABLE_PROPERTY_VALIDATION
     /* Property-Based Invariant Testing */
-    {   
+    {
         /* Test basic operations with property validation */
         {
             printf("Testing basic operations with property validation: \n");
@@ -936,13 +949,14 @@ int main()
                 free(cached_prop_nodes[i]);
             }
 
-            assert_property_cached_tree_valid(&prop_cached_tree, "cached cleanup");
+            assert_property_cached_tree_valid(&prop_cached_tree,
+                                              "cached cleanup");
         }
 #endif
 
         /* Stress test with property validation */
         {
-            printf("Testing stress operations with property validation... ");
+            print_test_start("stress operations with property validation");
 
             rb_t stress_tree = {0};
             stress_tree.cmp_func = property_test_node_cmp;
@@ -1017,12 +1031,12 @@ int main()
                 free(stress_nodes[i]);
             }
 
-            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+            print_test_ok();
         }
 
         /* Test explicit validation of the 5 fundamental properties */
         {
-            printf("Testing explicit validation of the 5 RB properties... ");
+            print_test_start("explicit validation of the 5 RB properties");
 
             rb_t prop_tree = {0};
             prop_tree.cmp_func = property_test_node_cmp;
@@ -1086,12 +1100,12 @@ int main()
                 free(nodes[i]);
             }
 
-            printf("[ " COLOR_GREEN "OK" COLOR_RESET" ]\n");
+            print_test_ok();
         }
 
         /* Test validation error detection */
         {
-            printf("Testing validation error detection... ");
+            print_test_start("validation error detection");
 
             /* Test NULL tree validation */
             rb_validation_t null_result = rb_validate_tree(NULL);
@@ -1113,12 +1127,12 @@ int main()
             assert(empty_result.black_height_consistent);
             assert(empty_result.single_child_red);
 
-            printf("[ " COLOR_GREEN "OK" COLOR_RESET" ]\n");
+            print_test_ok();
         }
 
         /* Test property validation descriptions and reporting */
         {
-            printf("Testing property validation descriptions... ");
+            print_test_start("property validation descriptions");
 
             /* Create a simple tree for testing property descriptions */
             rb_t desc_tree = {0};
@@ -1155,10 +1169,10 @@ int main()
             free(right_node);
             free(root_node);
 
-            printf("[ " COLOR_GREEN "OK" COLOR_RESET" ]\n");
+            print_test_ok();
         }
 
-        printf("\rTesting comprehensive property-based invariants... [" COLOR_GREEN "OK" COLOR_RESET"]\n");
+        print_test_complete("Testing comprehensive property-based invariants");
     }
 #endif /* _RB_ENABLE_PROPERTY_VALIDATION */
 
@@ -1176,8 +1190,7 @@ int main()
 
         /* Test 1: Sequential insertion and deletion */
         {
-            printf("Testing sequential operations... ");
-            fflush(stdout);
+            print_test_start("sequential operations");
 
             rb_t tree;
             memset(&tree, 0, sizeof(tree));
@@ -1209,13 +1222,12 @@ int main()
             }
 
             assert(tree.root == NULL);
-            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+            print_test_ok();
         }
 
         /* Test 2: Reverse order operations */
         {
-            printf("Testing reverse order operations... ");
-            fflush(stdout);
+            print_test_start("reverse order operations");
 
             rb_t tree;
             memset(&tree, 0, sizeof(tree));
@@ -1247,7 +1259,7 @@ int main()
             }
 
             assert(tree.root == NULL);
-            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+            print_test_ok();
         }
 
         /* Test 3: Random operations with various removal patterns */
@@ -1331,13 +1343,12 @@ int main()
                     nodes[i].removed = false;
             }
 
-            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+            print_test_ok();
         }
 
         /* Test 4: Iterator robustness */
         {
-            printf("Testing iterator robustness... ");
-            fflush(stdout);
+            print_test_start("iterator robustness");
 
             uint32_t rng_state = TEST_SEED;
 
@@ -1410,7 +1421,7 @@ int main()
             }
 
             assert(tree.root == NULL);
-            printf("[ " COLOR_GREEN "OK" COLOR_RESET " ]\n");
+            print_test_ok();
         }
 
         /* Print test statistics */
@@ -1424,8 +1435,7 @@ int main()
                test_stats.nodes_inserted + test_stats.nodes_removed +
                    test_stats.iterator_operations);
 
-        printf("Testing comprehensive randomized patterns... [ " COLOR_GREEN
-               "OK" COLOR_RESET " ]\n");
+        print_test_complete("Testing comprehensive randomized patterns");
 
 #undef TEST_NODES
 #undef TEST_ITERATIONS
