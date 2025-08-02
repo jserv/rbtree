@@ -9,12 +9,6 @@
 
 #include "rbtree.h"
 
-/* Enable property-based validation in tests if available */
-#if _RB_ENABLE_PROPERTY_VALIDATION
-#define ENABLE_VALIDATION_TESTING 1
-#else
-#define ENABLE_VALIDATION_TESTING 0
-#endif
 
 #define MAX_NODES 256
 
@@ -153,7 +147,7 @@ void check_rb(void)
     check_rbnode(test_rbtree.root, 0);
 }
 
-#if ENABLE_VALIDATION_TESTING
+#if _RB_ENABLE_PROPERTY_VALIDATION
 /* Helper function to validate tree using property-based testing */
 static void validate_tree_properties(int expected_nodes)
 {
