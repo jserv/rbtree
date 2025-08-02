@@ -5,6 +5,17 @@
 
 #include "rbtree.h"
 
+/* Branch prediction hints for performance optimization */
+#ifndef likely
+#if defined(__GNUC__) || defined(__clang__)
+#define likely(x)   __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+#else
+#define likely(x)   (x)
+#define unlikely(x) (x)
+#endif
+#endif
+
 /* Compile-time validation of stack depth for safety */
 #if _RB_ENABLE_SAFETY_CHECKS
 _Static_assert(_RB_MAX_TREE_DEPTH >= 32, "Stack depth too small for safety");
@@ -187,7 +198,7 @@ static unsigned find_and_stack(rb_t *tree, rb_node_t *node, rb_node_t **stack)
 
 #if _RB_ENABLE_SAFETY_CHECKS
         /* Enhanced bounds checking with early detection */
-        if (sz >= (unsigned) _RB_MAX_TREE_DEPTH - 2) {
+        if (unlikely(sz >= (unsigned) _RB_MAX_TREE_DEPTH - 2)) {
             /* Prevent buffer overflow - tree likely corrupted */
             return sz; /* Safe early termination */
         }
@@ -301,7 +312,7 @@ static void fix_extra_red(rb_node_t **stack, unsigned stacksz)
         rb_node_t *parent = stack[stacksz - 2];
 
         /* If the parent is black, the tree is already balanced. */
-        if (is_black(parent))
+        if (likely(is_black(parent)))
             return;
 
         rb_node_t *grandparent = stack[stacksz - 3];
@@ -310,7 +321,7 @@ static void fix_extra_red(rb_node_t **stack, unsigned stacksz)
             get_child(grandparent, (side == RB_LEFT) ? RB_RIGHT : RB_LEFT);
 
         /* Case 1: The aunt is red. Recolor and move up the tree. */
-        if (aunt && is_red(aunt)) {
+        if (unlikely(aunt && is_red(aunt))) {
             set_red(grandparent);
             set_black(parent);
             set_black(aunt);
@@ -350,7 +361,7 @@ void rb_insert(rb_t *tree, rb_node_t *node)
     set_child(node, RB_RIGHT, NULL);
 
     /* If the tree is empty, set the new node as the root and color it black. */
-    if (!tree->root) {
+    if (unlikely(!tree->root)) {
         tree->root = node;
 #if _RB_DISABLE_ALLOCA != 0
         tree->max_depth = 1;
@@ -655,9 +666,11 @@ int __rb_is_black(rb_node_t *node)
 
 bool rb_contains(rb_t *tree, rb_node_t *node)
 {
-    rb_node_t *n = tree->root;
+    if (unlikely(!tree || !tree->root || !node))
+        return false;
 
-    while (n && (n != node))
+    rb_node_t *n = tree->root;
+    while (likely(n) && (n != node))
         n = get_child(n, tree->cmp_func(node, n) ? RB_LEFT : RB_RIGHT);
 
     return n == node;
