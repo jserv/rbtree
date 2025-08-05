@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "rbtree.h"
 
@@ -15,6 +16,7 @@
 /* ANSI color codes */
 #define COLOR_GREEN "\033[32m"
 #define COLOR_RESET "\033[0m"
+#define STEP_INTERVAL_MS 400000 /* 0.4 s */
 
 /* Test message handling macros */
 #define TEST_OK_MSG "[ " COLOR_GREEN "OK" COLOR_RESET " ]"
@@ -29,7 +31,7 @@
         printf("\r" msg);        \
         fflush(stdout);          \
     } while (0)
-#define print_test_complete(msg) printf("\r" msg "... " TEST_OK_MSG "\n")
+#define print_test_complete(msg) printf("\r\033[2K" msg "... " TEST_OK_MSG "\n")
 
 static rb_t test_rbtree;
 
@@ -224,9 +226,9 @@ static void assert_property_tree_valid(rb_t *tree, const char *operation)
            "Property 4: All paths have same black height");
     assert(result.single_child_red &&
            "Property 5: Single children must be red");
-
-    printf("  ✓ Validated after %s (nodes: %zu, black_height: %d)\n", operation,
-           result.node_count, result.black_height);
+    printf("\r\033[2K" "Property cached validation passed after %s (nodes: %zu, black_height: %d)", operation, result.node_count, result.black_height);
+    fflush(stdout);
+    usleep(STEP_INTERVAL_MS); 
 }
 #else
 #define assert_property_tree_valid(tree, operation) ((void) 0)
@@ -245,8 +247,10 @@ static void assert_property_cached_tree_valid(rb_cached_t *tree,
         rb_print_validation_report(&result);
         assert(0 && "Property-based cached tree validation failed");
     }
-    printf("  ✓ Passed after %s (nodes: %zu,black_height: %d)\n", operation,
+    printf("\r\033[2K" "Passed after %s (nodes: %zu, black_height: %d)", operation,
            result.node_count, result.black_height);
+    fflush(stdout);
+    usleep(STEP_INTERVAL_MS); 
 }
 #else
 #define assert_property_cached_tree_valid(tree, operation) ((void) 0)
@@ -429,8 +433,8 @@ int main()
 {
     /* rbtree_api */
     {
-        printf("Testing basic red-black tree operations...");
-        fflush(stdout);
+        print_test_start("Testing basic red-black tree operations");
+        usleep(STEP_INTERVAL_MS); 
         int size = 1;
 
         do {
@@ -438,11 +442,11 @@ int main()
 
             if (size > MAX_NODES)
                 size = MAX_NODES;
-
-            printf("\r  Checking trees built from %d nodes...", size);
-            fflush(stdout);
-
+            printf("\r\033[2K" "Checking trees built from %d nodes... ", size);
             test_tree(size);
+            printf(TEST_OK_MSG);
+            fflush(stdout);
+            usleep(STEP_INTERVAL_MS); 
         } while (size < MAX_NODES);
         print_test_complete("Testing basic red-black tree operations");
     }
@@ -849,7 +853,8 @@ int main()
     {
         /* Test basic operations with property validation */
         {
-            printf("Testing basic operations with property validation: \n");
+            print_test_start("Testing basic operations with property validation");
+            usleep(STEP_INTERVAL_MS); 
 
             rb_t prop_tree = {0};
             prop_tree.cmp_func = property_test_node_cmp;
@@ -896,11 +901,13 @@ int main()
             }
             assert_property_tree_valid(&prop_tree, "cleanup");
         }
+        print_test_complete("Testing basic operations with property validation");
 
 #if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
         /* Test cached tree property validation */
         {
-            printf("Testing cached tree property validation:\n");
+            print_test_start("Testing cached tree property validation");
+            usleep(STEP_INTERVAL_MS); 
 
             rb_cached_t prop_cached_tree;
             rb_cached_init(&prop_cached_tree, property_test_node_cmp);
@@ -946,6 +953,7 @@ int main()
             assert_property_cached_tree_valid(&prop_cached_tree,
                                               "cached cleanup");
         }
+        print_test_complete("Testing cached tree property validation");
 #endif
 
         /* Stress test with property validation */
