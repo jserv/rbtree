@@ -226,7 +226,7 @@ static void assert_property_tree_valid(rb_t *tree, const char *operation)
            "Property 4: All paths have same black height");
     assert(result.single_child_red &&
            "Property 5: Single children must be red");
-    printf("\r\033[2K" "Property cached validation passed after %s (nodes: %zu, black_height: %d)", operation, result.node_count, result.black_height);
+    printf("\r\033[2K" "Validated after %s (nodes: %zu, black_height: %d)", operation, result.node_count, result.black_height);
     fflush(stdout);
     usleep(STEP_INTERVAL_MS); 
 }
@@ -247,7 +247,7 @@ static void assert_property_cached_tree_valid(rb_cached_t *tree,
         rb_print_validation_report(&result);
         assert(0 && "Property-based cached tree validation failed");
     }
-    printf("\r\033[2K" "Passed after %s (nodes: %zu, black_height: %d)", operation,
+    printf("\r\033[2K" "Validated after %s (nodes: %zu, black_height: %d)", operation,
            result.node_count, result.black_height);
     fflush(stdout);
     usleep(STEP_INTERVAL_MS); 
