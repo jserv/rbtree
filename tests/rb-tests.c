@@ -226,9 +226,12 @@ static void assert_property_tree_valid(rb_t *tree, const char *operation)
            "Property 4: All paths have same black height");
     assert(result.single_child_red &&
            "Property 5: Single children must be red");
-    printf("\r\033[2K" "Validated after %s (nodes: %zu, black_height: %d)", operation, result.node_count, result.black_height);
+    printf(
+        "\r\033[2K"
+        "Validated after %s (nodes: %zu, black_height: %d)",
+        operation, result.node_count, result.black_height);
     fflush(stdout);
-    usleep(STEP_INTERVAL_MS); 
+    usleep(STEP_INTERVAL_MS);
 }
 #else
 #define assert_property_tree_valid(tree, operation) ((void) 0)
@@ -247,10 +250,12 @@ static void assert_property_cached_tree_valid(rb_cached_t *tree,
         rb_print_validation_report(&result);
         assert(0 && "Property-based cached tree validation failed");
     }
-    printf("\r\033[2K" "Validated after %s (nodes: %zu, black_height: %d)", operation,
-           result.node_count, result.black_height);
+    printf(
+        "\r\033[2K"
+        "Validated after %s (nodes: %zu, black_height: %d)",
+        operation, result.node_count, result.black_height);
     fflush(stdout);
-    usleep(STEP_INTERVAL_MS); 
+    usleep(STEP_INTERVAL_MS);
 }
 #else
 #define assert_property_cached_tree_valid(tree, operation) ((void) 0)
@@ -434,7 +439,7 @@ int main()
     /* rbtree_api */
     {
         print_test_start("Testing basic red-black tree operations");
-        usleep(STEP_INTERVAL_MS); 
+        usleep(STEP_INTERVAL_MS);
         int size = 1;
 
         do {
@@ -442,11 +447,14 @@ int main()
 
             if (size > MAX_NODES)
                 size = MAX_NODES;
-            printf("\r\033[2K" "Checking trees built from %d nodes... ", size);
+            printf(
+                "\r\033[2K"
+                "Checking trees built from %d nodes... ",
+                size);
             test_tree(size);
             printf(TEST_OK_MSG);
             fflush(stdout);
-            usleep(STEP_INTERVAL_MS); 
+            usleep(STEP_INTERVAL_MS);
         } while (size < MAX_NODES);
         print_test_complete("Testing basic red-black tree operations");
     }
@@ -853,8 +861,9 @@ int main()
     {
         /* Test basic operations with property validation */
         {
-            print_test_start("Testing basic operations with property validation");
-            usleep(STEP_INTERVAL_MS); 
+            print_test_start(
+                "Testing basic operations with property validation");
+            usleep(STEP_INTERVAL_MS);
 
             rb_t prop_tree = {0};
             prop_tree.cmp_func = property_test_node_cmp;
@@ -901,13 +910,97 @@ int main()
             }
             assert_property_tree_valid(&prop_tree, "cleanup");
         }
-        print_test_complete("Testing basic operations with property validation");
+        print_test_complete(
+            "Testing basic operations with property validation");
 
+#if _RB_ENABLE_BATCH_OPS
+        /* property validation tests for batch operations */
+        {
+            print_test_start(
+                "Testing batch operations with property validation");
+            usleep(STEP_INTERVAL_MS);
+
+            rb_batch_t prop_batch;
+            assert(rb_batch_init(&prop_batch, 0) == 0);
+
+            /* Test batch insertion into empty tree */
+            rb_t prop_batch_tree = {0};
+            prop_batch_tree.cmp_func = property_test_node_cmp;
+            const int prpo_batch_size = 127;
+            property_test_node_t *batch_prop_nodes[prpo_batch_size * 2];
+
+            assert_property_tree_valid(&prop_batch_tree, "initialization");
+
+            /* Commit batch to empty tree */
+
+            /* 1. Add nodes to batch */
+            for (int i = 0; i < prpo_batch_size; i++) {
+                batch_prop_nodes[i] = create_property_test_node(i, i * 10);
+                assert(rb_batch_add(&prop_batch,
+                                    &batch_prop_nodes[i]->rb_link) == 0);
+            }
+            /* 2. Commit batch to empty tree */
+            rb_batch_commit(&prop_batch_tree, &prop_batch);
+
+            /* 3. Verify tree structure */
+            assert(prop_batch_tree.root != NULL);
+
+            /* 4. Verify all nodes are present */
+            int prop_node_count = 0;
+            rb_node_t *prop_n;
+            RB_FOREACH (&prop_batch_tree, prop_n) {
+                prop_node_count++;
+            }
+            assert(prop_node_count == prpo_batch_size);
+            for (int i = 0; i < prpo_batch_size; i++)
+                assert(rb_contains(&prop_batch_tree,
+                                   &batch_prop_nodes[i]->rb_link));
+            /* 5. Property validation */
+            assert_property_tree_valid(&prop_batch_tree,
+                                       "committed to empty tree");
+
+            /* 6. Clear and reuse batch */
+            prop_batch.count = 0;
+
+            /* Commit to non-empty tree (should fall back to regular insertions)
+             */
+
+            /* 1. Add nodes to batch */
+            for (int i = prpo_batch_size; i < prpo_batch_size * 2; i++) {
+                batch_prop_nodes[i] = create_property_test_node(i, i * 10);
+                assert(rb_batch_add(&prop_batch,
+                                    &batch_prop_nodes[i]->rb_link) == 0);
+            }
+            /* 2. Commit batch to non-empty tree */
+            rb_batch_commit(&prop_batch_tree, &prop_batch);
+
+            /* 3. Verify tree structure */
+            assert(prop_batch_tree.root != NULL);
+
+            /* 4. Verify all nodes are present */
+            prop_node_count = 0;
+            RB_FOREACH (&prop_batch_tree, prop_n) {
+                prop_node_count++;
+            }
+            assert(prop_node_count == prpo_batch_size * 2);
+            for (int i = 0; i < prpo_batch_size * 2; i++)
+                assert(rb_contains(&prop_batch_tree,
+                                   &batch_prop_nodes[i]->rb_link));
+            /* 5. Property validation */
+            assert_property_tree_valid(&prop_batch_tree,
+                                       "committed to non-empty tree");
+
+            /* 6. Cleanup */
+            rb_batch_destroy(&prop_batch);
+        }
+        print_test_complete(
+            "Testing batch operations with property validation");
+#endif
 #if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
         /* Test cached tree property validation */
         {
             print_test_start("Testing cached tree property validation");
-            usleep(STEP_INTERVAL_MS); 
+            usleep(STEP_INTERVAL_MS);
 
             rb_cached_t prop_cached_tree;
             rb_cached_init(&prop_cached_tree, property_test_node_cmp);

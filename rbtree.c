@@ -945,28 +945,6 @@ static rb_node_t *rb_batch_build_balanced(rb_node_t **nodes, int start, int end)
     return node;
 }
 
-/**
- * Simple coloring strategy: make all nodes black.
- * This creates a valid (though not optimal) red-black tree.
- */
-static void rb_batch_color_all_black(rb_node_t *node)
-{
-    if (!node)
-        return;
-
-    /* Get actual children (without color bit) */
-    rb_node_t *left =
-        (rb_node_t *) ((uintptr_t) node->children[RB_LEFT] & ~RB_COLOR_MASK);
-    rb_node_t *right = node->children[RB_RIGHT];
-
-    /* Make this node black */
-    node->children[RB_LEFT] = (rb_node_t *) ((uintptr_t) left | RB_COLOR_MASK);
-
-    /* Recursively color children */
-    rb_batch_color_all_black(left);
-    rb_batch_color_all_black(right);
-}
-
 int rb_batch_init(rb_batch_t *batch, size_t initial_capacity)
 {
     batch->count = 0;
@@ -1018,13 +996,13 @@ void rb_batch_commit(rb_t *tree, rb_batch_t *batch)
         /* Sort nodes */
         qsort(batch->nodes, batch->count, sizeof(rb_node_t *),
               rb_batch_qsort_cmp);
-
+        int black_range = (1ull << (sizeof(size_t) * 8 -
+                                    __builtin_clzl(batch->count + 1) - 1)) -
+                          1;
         /* Build balanced tree */
-        tree->root = rb_batch_build_balanced(batch->nodes, 0, batch->count - 1);
-
-        /* Color all nodes black (simple but valid coloring) */
-        rb_batch_color_all_black(tree->root);
-
+        tree->root = rb_batch_build_balanced(batch->nodes, 0, black_range - 1);
+        for (size_t i = black_range; i < batch->count; i++)
+            rb_insert(tree, batch->nodes[i]);
 #if _RB_DISABLE_ALLOCA != 0
         /* Update max_depth for the new tree */
         tree->max_depth = 0;
