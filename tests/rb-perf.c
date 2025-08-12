@@ -386,6 +386,157 @@ static void bench_mixed_operations(int count)
     free(test_nodes);
 }
 
+/* Benchmark batch operations */
+#if _RB_ENABLE_BATCH_OPS
+void sequential_batch_insertion(int count)
+{
+    /* Allocate nodes on heap to avoid stack issues */
+    struct perf_node *test_nodes = calloc(count, sizeof(struct perf_node));
+    if (!test_nodes) {
+        fprintf(stderr, "Failed to allocate memory for %d nodes\n", count);
+        return;
+    }
+
+    /* Initialize tree */
+    rb_t tree;
+    memset(&tree, 0, sizeof(tree));
+    tree.cmp_func = perf_node_lessthan;
+    tree.root = NULL;
+#if _RB_DISABLE_ALLOCA != 0
+    tree.max_depth = 0;
+#endif
+
+    /* Generate unique sequential keys */
+    for (int i = 0; i < count; i++) {
+        test_nodes[i].key = i;
+        /* Initialize node to ensure clean state */
+        memset(&test_nodes[i].node, 0, sizeof(rb_node_t));
+    }
+
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    /* Insert nodes */
+    rb_batch_t batch;
+    assert(rb_batch_init(&batch, 0) == 0);
+    for (int i = 0; i < count; i++) {
+        rb_batch_add(&batch, &test_nodes[i].node);
+    }
+    rb_batch_commit(&tree, &batch);
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    double elapsed = timespec_diff(&start, &end);
+
+    print_timing("Sequential insertion", count, elapsed);
+
+    free(test_nodes);
+}
+
+void random_batch_insertion(int count)
+{
+    /* Allocate nodes on heap to avoid stack issues */
+    struct perf_node *test_nodes = calloc(count, sizeof(struct perf_node));
+    if (!test_nodes) {
+        fprintf(stderr, "Failed to allocate memory for %d nodes\n", count);
+        return;
+    }
+
+    /* Initialize tree */
+    rb_t tree;
+    memset(&tree, 0, sizeof(tree));
+    tree.cmp_func = perf_node_lessthan;
+    tree.root = NULL;
+#if _RB_DISABLE_ALLOCA != 0
+    tree.max_depth = 0;
+#endif
+
+    /* Generate unique sequential keys */
+    for (int i = 0; i < count; i++) {
+        test_nodes[i].key = i;
+        /* Initialize node to ensure clean state */
+        memset(&test_nodes[i].node, 0, sizeof(rb_node_t));
+    }
+
+    /* Shuffle for random insertion order using Fisher-Yates */
+    for (int i = count - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        uint32_t temp = test_nodes[i].key;
+        test_nodes[i].key = test_nodes[j].key;
+        test_nodes[j].key = temp;
+    }
+
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    /* Insert nodes */
+    rb_batch_t batch;
+    assert(rb_batch_init(&batch, 0) == 0);
+    for (int i = 0; i < count; i++) {
+        rb_batch_add(&batch, &test_nodes[i].node);
+    }
+    rb_batch_commit(&tree, &batch);
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    double elapsed = timespec_diff(&start, &end);
+
+    print_timing("Random insertion", count, elapsed);
+
+    free(test_nodes);
+}
+
+void reverse_batch_insertion(int count)
+{
+    /* Allocate nodes on heap to avoid stack issues */
+    struct perf_node *test_nodes = calloc(count, sizeof(struct perf_node));
+    if (!test_nodes) {
+        fprintf(stderr, "Failed to allocate memory for %d nodes\n", count);
+        return;
+    }
+
+    /* Initialize tree */
+    rb_t tree;
+    memset(&tree, 0, sizeof(tree));
+    tree.cmp_func = perf_node_lessthan;
+    tree.root = NULL;
+#if _RB_DISABLE_ALLOCA != 0
+    tree.max_depth = 0;
+#endif
+
+    /* Generate unique sequential keys */
+    for (int i = 0; i < count; i++) {
+        test_nodes[i].key = count - i;
+        /* Initialize node to ensure clean state */
+        memset(&test_nodes[i].node, 0, sizeof(rb_node_t));
+    }
+
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    /* Insert nodes */
+    rb_batch_t batch;
+    assert(rb_batch_init(&batch, 0) == 0);
+    for (int i = 0; i < count; i++) {
+        rb_batch_add(&batch, &test_nodes[i].node);
+    }
+    rb_batch_commit(&tree, &batch);
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    double elapsed = timespec_diff(&start, &end);
+
+    print_timing("Reverse insertion", count, elapsed);
+
+    free(test_nodes);
+}
+
+static void bench_batch_insertion(int count)
+{
+    printf("\n=== Batch Insertion Benchmark ===\n");
+    sequential_batch_insertion(count);
+    random_batch_insertion(count);
+    reverse_batch_insertion(count);
+}
+#endif
+
 /* Benchmark cached tree operations */
 #if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
 static void bench_cached_tree(int count)
@@ -505,6 +656,9 @@ int main(int argc, char *argv[])
         bench_search(count);
         bench_deletion(count);
         bench_mixed_operations(count);
+#if _RB_ENABLE_BATCH_OPS
+        bench_batch_insertion(count);
+#endif
 #if _RB_ENABLE_LEFTMOST_CACHE || _RB_ENABLE_RIGHTMOST_CACHE
         bench_cached_tree(count);
 #endif
