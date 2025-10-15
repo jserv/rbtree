@@ -14,6 +14,7 @@
 #include <time.h>
 
 #include "rbtree.h"
+#include "rng.h"
 
 /* Runtime platform detection using uname */
 static char platform_name[256] = {0};
@@ -138,16 +139,8 @@ static inline uint64_t ticks_read(void)
 #define ticks_difference(t1, t0) ((t1) - (t0))
 #define ticks_to_nanoseconds(t) (t)
 
-/* Random number generator */
-static inline uint32_t simple_random(uint32_t x)
-{
-    x ^= x >> 16;
-    x *= 0x7feb352dUL;
-    x ^= x >> 15;
-    x *= 0x846ca68bUL;
-    x ^= x >> 16;
-    return x;
-}
+/* RNG state for benchmark operations */
+static uint32_t bench_rng_state = 0xdeadbeef;
 
 /* Node management */
 static inline void *get_node(void *nodes, size_t node_size, size_t i)
@@ -190,7 +183,6 @@ static inline void test_random_ops(void *tree,
                                    void (*insert_func)(void *, void *),
                                    void (*extract_func)(void *, void *))
 {
-    uint32_t v = 0xdeadbeef;
     size_t m = 123 * node_count;
     unsigned long insert_count = 0;
     unsigned long extract_count = 0;
@@ -209,6 +201,7 @@ static inline void test_random_ops(void *tree,
     t0 = ticks_read();
 
     for (i = 0; i < m; ++i) {
+        uint32_t v = test_rand_u32(&bench_rng_state);
         size_t j = (v >> shift) % node_count;
         void *node = get_node(nodes, node_size, j);
         test_data *data = (*get_data_func)(node);
@@ -222,8 +215,6 @@ static inline void test_random_ops(void *tree,
             ++insert_count;
             (*insert_func)(tree, node);
         }
-
-        v = simple_random(v);
     }
 
     t1 = ticks_read();

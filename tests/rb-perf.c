@@ -8,6 +8,7 @@
 #include <time.h>
 
 #include "rbtree.h"
+#include "rng.h"
 
 struct perf_node {
     rb_node_t node;
@@ -65,12 +66,17 @@ void random_insertion(int count)
     }
 
     /* Shuffle for random insertion order using Fisher-Yates */
-    for (int i = count - 1; i > 0; i--) {
-        int j = rand() % (i + 1);
-        uint32_t temp = test_nodes[i].key;
-        test_nodes[i].key = test_nodes[j].key;
-        test_nodes[j].key = temp;
-    }
+    uint32_t *keys = malloc(count * sizeof(uint32_t));
+    for (int i = 0; i < count; i++)
+        keys[i] = test_nodes[i].key;
+
+    uint32_t rng_state = 0; /* Non-deterministic seed */
+    test_rand_init(&rng_state, 0);
+    test_shuffle_u32(&rng_state, keys, count);
+
+    for (int i = 0; i < count; i++)
+        test_nodes[i].key = keys[i];
+    free(keys);
 
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
@@ -204,12 +210,17 @@ static void bench_search(int count)
     }
 
     /* Shuffle for random insertion */
-    for (int i = count - 1; i > 0; i--) {
-        int j = rand() % (i + 1);
-        uint32_t temp = test_nodes[i].key;
-        test_nodes[i].key = test_nodes[j].key;
-        test_nodes[j].key = temp;
-    }
+    uint32_t *search_keys = malloc(count * sizeof(uint32_t));
+    for (int i = 0; i < count; i++)
+        search_keys[i] = test_nodes[i].key;
+
+    uint32_t rng_state = 0;
+    test_rand_init(&rng_state, 0);
+    test_shuffle_u32(&rng_state, search_keys, count);
+
+    for (int i = 0; i < count; i++)
+        test_nodes[i].key = search_keys[i];
+    free(search_keys);
 
     /* Insert all nodes */
     for (int i = 0; i < count; i++) {
@@ -263,12 +274,17 @@ static void bench_deletion(int count)
     }
 
     /* Shuffle for random insertion */
-    for (int i = count - 1; i > 0; i--) {
-        int j = rand() % (i + 1);
-        uint32_t temp = test_nodes[i].key;
-        test_nodes[i].key = test_nodes[j].key;
-        test_nodes[j].key = temp;
-    }
+    uint32_t *del_keys = malloc(count * sizeof(uint32_t));
+    for (int i = 0; i < count; i++)
+        del_keys[i] = test_nodes[i].key;
+
+    uint32_t rng_state = 0;
+    test_rand_init(&rng_state, 0);
+    test_shuffle_u32(&rng_state, del_keys, count);
+
+    for (int i = 0; i < count; i++)
+        test_nodes[i].key = del_keys[i];
+    free(del_keys);
 
     /* Insert all nodes */
     for (int i = 0; i < count; i++) {
@@ -286,8 +302,10 @@ static void bench_deletion(int count)
         delete_order[i] = &test_nodes[i].node;
 
     /* Shuffle deletion order */
+    uint32_t shuffle_rng = 0;
+    test_rand_init(&shuffle_rng, 0);
     for (int i = count - 1; i > 0; i--) {
-        int j = rand() % (i + 1);
+        int j = test_rand_range(&shuffle_rng, i + 1);
         rb_node_t *temp = delete_order[i];
         delete_order[i] = delete_order[j];
         delete_order[j] = temp;
@@ -350,15 +368,17 @@ static void bench_mixed_operations(int count)
     }
 
     /* Mixed phase */
+    uint32_t mixed_rng = 0;
+    test_rand_init(&mixed_rng, 0);
     for (int i = 0; i < count * 2; i++) {
-        int op = rand() % 100;
+        int op = test_rand_range(&mixed_rng, 100);
 
         if (op < 40 && inserts < count) {
             rb_insert(&tree, &test_nodes[inserts].node);
             inserts++;
             total_ops++;
         } else if (op < 80 && inserts > deletes) {
-            int idx = rand() % inserts;
+            int idx = test_rand_range(&mixed_rng, inserts);
             rb_contains(&tree, &test_nodes[idx].node);
             searches++;
             total_ops++;
@@ -453,12 +473,17 @@ void random_batch_insertion(int count)
     }
 
     /* Shuffle for random insertion order using Fisher-Yates */
-    for (int i = count - 1; i > 0; i--) {
-        int j = rand() % (i + 1);
-        uint32_t temp = test_nodes[i].key;
-        test_nodes[i].key = test_nodes[j].key;
-        test_nodes[j].key = temp;
-    }
+    uint32_t *batch_keys = malloc(count * sizeof(uint32_t));
+    for (int i = 0; i < count; i++)
+        batch_keys[i] = test_nodes[i].key;
+
+    uint32_t batch_rng = 0;
+    test_rand_init(&batch_rng, 0);
+    test_shuffle_u32(&batch_rng, batch_keys, count);
+
+    for (int i = 0; i < count; i++)
+        test_nodes[i].key = batch_keys[i];
+    free(batch_keys);
 
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
@@ -555,12 +580,17 @@ static void bench_cached_tree(int count)
     }
 
     /* Shuffle for random insertion */
-    for (int i = count - 1; i > 0; i--) {
-        int j = rand() % (i + 1);
-        uint32_t temp = test_nodes[i].key;
-        test_nodes[i].key = test_nodes[j].key;
-        test_nodes[j].key = temp;
-    }
+    uint32_t *cached_keys = malloc(count * sizeof(uint32_t));
+    for (int i = 0; i < count; i++)
+        cached_keys[i] = test_nodes[i].key;
+
+    uint32_t cached_rng = 0;
+    test_rand_init(&cached_rng, 0);
+    test_shuffle_u32(&cached_rng, cached_keys, count);
+
+    for (int i = 0; i < count; i++)
+        test_nodes[i].key = cached_keys[i];
+    free(cached_keys);
 
     /* Benchmark cached insertion */
     struct timespec start, end;
@@ -640,9 +670,6 @@ int main(int argc, char *argv[])
     for (int i = 0; i < num_sizes; i++) {
         int count = test_sizes[i];
         printf("Benchmarking with %d nodes:\n", count);
-
-        /* Seed random number generator */
-        srand(time(NULL));
 
         /* Run benchmarks */
         bench_insertion(count);

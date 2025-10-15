@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "rbtree.h"
+#include "rng.h"
 
 #define MAX_NODES 256
 
@@ -78,21 +79,8 @@ static bool node_lessthan(const rb_node_t *a, const rb_node_t *b)
     return a < b;
 }
 
-/* Simple Linear Congruential Random Number Generator (LCRNG) with a modulus of
- * 2^64, adapted from:
- * https://nuclear.llnl.gov/CNP/rng/rngman/node4.html
- *
- * The goal is to maintain repeatability across platforms, with no strict
- * requirement for high-quality randomness.
- */
-static unsigned int next_rand_mod(unsigned int mod)
-{
-    static unsigned long long state = 123456789; /* seed */
-
-    state = state * 2862933555777941757ul + 3037000493ul;
-
-    return ((unsigned int) (state >> 32)) % mod;
-}
+/* RNG state for basic tree tests */
+static uint32_t basic_test_rng = 123456789;
 
 void visit_node(rb_node_t *node, void *cookie)
 {
@@ -331,7 +319,7 @@ void test_tree(int size)
 
     for (int j = 0; j < 10; j++) {
         for (int i = 0; i < size; i++) {
-            int node = next_rand_mod(size);
+            int node = test_rand_range(&basic_test_rng, size);
 
             if (!get_node_mask(node)) {
                 rb_insert(&test_rbtree, &nodes[node]);
@@ -359,25 +347,6 @@ void test_tree(int size)
 
 /* Magic number for corruption detection */
 #define NODE_MAGIC 0x9823af7e
-
-/* Fast 32-bit RNG - rapidhash variant
- * Reference: github.com/Nicoshev/rapidhash
- */
-
-/**
- * Advance state and return a new 32-bit pseudo-random value
- *
- * @state : Pointer to RNG state (modified)
- * Return New pseudo-random 32-bit value
- */
-static inline uint32_t rand_u32(uint32_t *state)
-{
-    *state += 0xe120fc15u;
-    uint64_t tmp = (uint64_t) (*state) * 0x4a39b70d;
-    uint32_t mix = (uint32_t) ((tmp >> 32) ^ tmp);
-    tmp = (uint64_t) mix * 0x12fad5c9;
-    return (uint32_t) ((tmp >> 32) ^ tmp);
-}
 
 /* Test node structure with corruption detection and metadata */
 typedef struct test_node {
@@ -442,7 +411,7 @@ int main()
         int size = 1;
 
         do {
-            size += next_rand_mod(size) + 1;
+            size += test_rand_range(&basic_test_rng, size) + 1;
 
             if (size > MAX_NODES)
                 size = MAX_NODES;
@@ -1061,7 +1030,7 @@ int main()
             bool stress_inserted[NUM_STRESS_NODES];
             memset(stress_inserted, false, sizeof(stress_inserted));
 
-            srand(42); /* Deterministic randomness for reproducible tests */
+            uint32_t stress_rng = 42; /* Deterministic randomness */
 
             /* Initialize nodes */
             for (int i = 0; i < NUM_STRESS_NODES; i++) {
@@ -1070,9 +1039,10 @@ int main()
 
             /* Perform random insert/delete operations */
             for (int op = 0; op < NUM_STRESS_OPERATIONS; op++) {
-                int idx = rand() % NUM_STRESS_NODES;
+                int idx = test_rand_range(&stress_rng, NUM_STRESS_NODES);
 
-                if (!stress_inserted[idx] && (rand() % 3) != 0) {
+                if (!stress_inserted[idx] &&
+                    (test_rand_range(&stress_rng, 3) != 0)) {
                     /* Insert operation (higher probability) */
                     rb_insert(&stress_tree, &stress_nodes[idx]->rb_link);
                     stress_inserted[idx] = true;
@@ -1376,7 +1346,7 @@ int main()
 
                 /* Generate random keys */
                 for (size_t i = 0; i < TEST_NODES; i++)
-                    keys[i] = rand_u32(&rng_state) % (TEST_NODES * 2);
+                    keys[i] = test_rand_u32(&rng_state) % (TEST_NODES * 2);
 
                 /* Random insertion */
                 for (size_t i = 0; i < TEST_NODES; i++) {
@@ -1410,7 +1380,7 @@ int main()
                 case 2: /* Random removal */
                     for (size_t remaining = TEST_NODES; remaining > 0;
                          remaining--) {
-                        size_t idx = rand_u32(&rng_state) % remaining;
+                        size_t idx = test_rand_u32(&rng_state) % remaining;
 
                         /* Find the idx-th non-removed node */
                         size_t current = 0;
@@ -1455,7 +1425,7 @@ int main()
             /* Insert nodes with random keys */
             for (size_t i = 0; i < TEST_NODES; i++) {
                 init_test_node(&nodes[i],
-                               rand_u32(&rng_state) % (TEST_NODES * 2));
+                               test_rand_u32(&rng_state) % (TEST_NODES * 2));
                 rb_insert(&tree, &nodes[i].rb_link);
                 test_stats.nodes_inserted++;
             }
