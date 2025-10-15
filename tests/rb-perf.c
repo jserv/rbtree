@@ -9,13 +9,10 @@
 
 #include "rbtree.h"
 
-
-
 struct perf_node {
     rb_node_t node;
     uint32_t key;
 };
-
 
 /* Comparator for performance nodes based on key value */
 static bool perf_node_lessthan(const rb_node_t *a, const rb_node_t *b)
@@ -285,9 +282,8 @@ static void bench_deletion(int count)
         return;
     }
 
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count; i++)
         delete_order[i] = &test_nodes[i].node;
-    }
 
     /* Shuffle deletion order */
     for (int i = count - 1; i > 0; i--) {
@@ -301,9 +297,8 @@ static void bench_deletion(int count)
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
 
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count; i++)
         rb_remove(&tree, delete_order[i]);
-    }
 
     clock_gettime(CLOCK_MONOTONIC, &end);
     double elapsed = timespec_diff(&start, &end);
@@ -616,8 +611,6 @@ static void bench_cached_tree(int count)
     free(test_nodes);
 }
 #endif
-
-
 
 int main(int argc, char *argv[])
 {

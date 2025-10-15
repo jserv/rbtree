@@ -10,7 +10,6 @@
 
 #include "rbtree.h"
 
-
 #define MAX_NODES 256
 
 /* ANSI color codes */
